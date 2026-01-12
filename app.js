@@ -314,6 +314,14 @@ async function handleUploadToNotion() {
     return;
   }
 
+  // Update data from UI before uploading
+  collectKeyPointsFromUI();
+
+  if (!currentKeyPoints || currentKeyPoints.length === 0) {
+    showStatus('沒有可上傳的重點', 'error');
+    return;
+  }
+
   showStatus('正在上傳至 Notion...', 'info');
   try {
     const result = await uploadToNotionAPI(currentKeyPoints, notionConfig);
@@ -614,30 +622,83 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-function copyToClipboard() {
-  if (!currentKeyPoints.length) return;
-  const text = currentKeyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n');
-  navigator.clipboard.writeText(text).then(() => {
-    showStatus('已複製到剪貼簿', 'success');
+/**
+ * Collect edited key points from DOM
+ */
+function collectKeyPointsFromUI() {
+  const container = document.getElementById('keyPointsContainer');
+  if (!container) return currentKeyPoints;
+
+  const items = container.querySelectorAll('.key-point-item');
+  const points = [];
+
+  items.forEach(item => {
+    if (item.classList.contains('structured')) {
+      // Structured data
+      const props = {};
+
+      // Text inputs
+      item.querySelectorAll('input.edit-field').forEach(input => {
+        const field = input.dataset.field;
+        const value = input.value.trim();
+
+        if (field === '歸屬分類' || field === '專案') {
+          // Split by comma
+          props[field] = value ? value.split(/[,，]/).map(s => s.trim()).filter(s => s) : [];
+        } else {
+          props[field] = value;
+        }
+      });
+
+      // Select
+      const statusSelect = item.querySelector('select.edit-field');
+      if (statusSelect) {
+        props['狀態'] = statusSelect.value;
+      }
+
+      points.push({ properties: props });
+
+    } else {
+      // Simple list
+      const textarea = item.querySelector('.simple-item');
+      if (textarea) {
+        const value = textarea.value.trim();
+        if (value) points.push(value);
+      }
+    }
   });
+
+  // Update global state
+  if (points.length > 0) {
+    currentKeyPoints = points;
+    console.log('🔄 Updated key points from UI:', points);
+  }
+
+  return points;
 }
 
-/**
- * Fallback renderer if ai-api.js displayKeyPoints fails
- */
-function renderKeyPoints(points) {
-  const html = `
-    <div class="key-points-list">
-      ${points.map((p, i) => `
-        <div class="key-point-item">
-          <div class="key-point-number">${i + 1}</div>
-          <div class="key-point-text">${p}</div>
-        </div>
-      `).join('')}
-    </div>
-  `;
-  elements.keyPointsContainer.innerHTML = html;
-  elements.copyKeyPoints.style.display = 'inline-flex';
+function copyToClipboard() {
+  // Sync with UI first
+  collectKeyPointsFromUI();
+
+  if (!currentKeyPoints.length) return;
+
+  // Format based on type
+  let text = '';
+  const isStructured = currentKeyPoints.length > 0 && typeof currentKeyPoints[0] === 'object';
+
+  if (isStructured) {
+    text = currentKeyPoints.map((p, i) => {
+      const props = p.properties;
+      return `${i + 1}. ${props.ToDo || '無標題'} [${props.狀態}]`;
+    }).join('\n');
+  } else {
+    text = currentKeyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n');
+  }
+
+  navigator.clipboard.writeText(text).then(() => {
+    showStatus('已複製到剪貼簿 (含修改)', 'success');
+  });
 }
 
 // ==========================================

@@ -317,6 +317,7 @@ function getLanguageName(langCode) {
 
 /**
  * Display key points in UI - supports both simple array and structured JSON
+ * Now renders editable inputs instead of static text
  * @param {Array} keyPoints - Array of key point strings or structured objects
  */
 function displayKeyPoints(keyPoints) {
@@ -335,21 +336,57 @@ function displayKeyPoints(keyPoints) {
 
     let html;
     if (isStructured) {
-        // Display structured data with multiple fields
+        // Display structured data with multiple editable fields
         html = `
     <div class="key-points-list">
       ${keyPoints.map((item, index) => {
             const props = item.properties;
             return `
-        <div class="key-point-item structured">
+        <div class="key-point-item structured" data-index="${index}">
           <div class="key-point-number">${index + 1}</div>
           <div class="key-point-content">
-            <div class="key-point-title"><strong>${escapeHtml(props.ToDo || '無標題')}</strong></div>
-            ${props.歸屬分類 && props.歸屬分類.length > 0 ? `<div class="key-point-meta">🏷️ ${escapeHtml(props.歸屬分類.join(', '))}</div>` : ''}
-            ${props.專案 && props.專案.length > 0 ? `<div class="key-point-meta">🚀 ${escapeHtml(props.專案.join(', '))}</div>` : ''}
-            ${props.負責人 ? `<div class="key-point-meta">👤 ${escapeHtml(props.負責人)}</div>` : ''}
-            ${props.到期日 ? `<div class="key-point-meta">📅 ${escapeHtml(props.到期日)}</div>` : ''}
-            ${props.狀態 ? `<div class="key-point-meta">🔄 ${escapeHtml(props.狀態)}</div>` : ''}
+            <!-- ToDo / Title -->
+            <div class="field-group full-width">
+                <input type="text" class="edit-field title" value="${escapeHtmlAttribute(props.ToDo || '')}" placeholder="待辦事項標題" data-field="ToDo">
+            </div>
+            
+            <div class="meta-row">
+                <!-- 歸屬分類 -->
+                <div class="field-group">
+                    <span class="field-icon">🏷️</span>
+                    <input type="text" class="edit-field tag" value="${escapeHtmlAttribute((props.歸屬分類 || []).join(', '))}" placeholder="分類 (逗號分隔)" data-field="歸屬分類">
+                </div>
+
+                <!-- 專案 -->
+                <div class="field-group">
+                    <span class="field-icon">🚀</span>
+                    <input type="text" class="edit-field project" value="${escapeHtmlAttribute((props.專案 || []).join(', '))}" placeholder="專案" data-field="專案">
+                </div>
+            </div>
+
+            <div class="meta-row">
+                <!-- 負責人 -->
+                <div class="field-group">
+                    <span class="field-icon">👤</span>
+                    <input type="text" class="edit-field person" value="${escapeHtmlAttribute(props.負責人 || '')}" placeholder="負責人" data-field="負責人">
+                </div>
+
+                <!-- 到期日 -->
+                <div class="field-group">
+                    <span class="field-icon">📅</span>
+                    <input type="date" class="edit-field date" value="${escapeHtmlAttribute(props.到期日 || '')}" data-field="到期日">
+                </div>
+
+                <!-- 狀態 -->
+                <div class="field-group">
+                    <span class="field-icon">🔄</span>
+                    <select class="edit-field status" data-field="狀態">
+                        <option value="未開始" ${props.狀態 === '未開始' ? 'selected' : ''}>未開始</option>
+                        <option value="進行中" ${props.狀態 === '進行中' ? 'selected' : ''}>進行中</option>
+                        <option value="完成" ${props.狀態 === '完成' ? 'selected' : ''}>完成</option>
+                    </select>
+                </div>
+            </div>
           </div>
         </div>
       `;
@@ -357,13 +394,15 @@ function displayKeyPoints(keyPoints) {
     </div>
   `;
     } else {
-        // Display simple string array
+        // Display simple string array as editable textareas
         html = `
     <div class="key-points-list">
       ${keyPoints.map((point, index) => `
-        <div class="key-point-item">
+        <div class="key-point-item simple">
           <div class="key-point-number">${index + 1}</div>
-          <div class="key-point-text">${escapeHtml(point)}</div>
+          <div class="key-point-content">
+            <textarea class="edit-field simple-item" rows="2" data-index="${index}">${escapeHtml(point)}</textarea>
+          </div>
         </div>
       `).join('')}
     </div>
@@ -378,7 +417,15 @@ function displayKeyPoints(keyPoints) {
         copyBtn.style.display = 'inline-flex';
     }
 
-    console.log(`✅ Displayed ${keyPoints.length} ${isStructured ? 'structured items' : 'key points'}`);
+    console.log(`✅ Displayed ${keyPoints.length} editable items`);
+}
+
+/**
+ * Helper to escape HTML attributes
+ */
+function escapeHtmlAttribute(text) {
+    if (!text) return '';
+    return text.toString().replace(/"/g, '&quot;');
 }
 
 /**
