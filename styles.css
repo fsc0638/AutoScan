@@ -1536,3 +1536,83 @@ textarea::placeholder {
          z - i n d e x :   1 ;  
  }  
  
+/* Editable Key Points Styles */
+.edit-field {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-color: transparent;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+.edit-field:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.edit-field:focus {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--primary-color);
+  outline: none;
+}
+
+.edit-field.title {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.edit-field.tag, .edit-field.project, .edit-field.person, .edit-field.date, .edit-field.status {
+  font-size: 0.9em;
+}
+
+.field-group {
+  display: flex;
+  align-items: center;
+  margin-right: 15px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.field-group.full-width {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.field-icon {
+  margin-right: 6px;
+  font-size: 1.2em;
+  opacity: 0.8;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.key-point-content {
+  width: 100%;
+}
+
+select.edit-field {
+  background-color: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+
+textarea.edit-field.simple-item {
+  resize: vertical;
+  min-height: 24px;
+}
+
+/* Specific adjustment for dark theme inputs */
+@media (prefers-color-scheme: dark) {
+    .edit-field {
+        color: #e0e0e0;
+    }
+}
+
