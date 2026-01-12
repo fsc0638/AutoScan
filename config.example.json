@@ -1,0 +1,13 @@
+{
+    "gemini": {
+        "apiKey": "YOUR_GEMINI_API_KEY_HERE"
+    },
+    "openai": {
+        "apiKey": "YOUR_OPENAI_API_KEY_HERE",
+        "assistantId": "YOUR_ASSISTANT_ID_HERE"
+    },
+    "notion": {
+        "token": "YOUR_NOTION_TOKEN_HERE",
+        "databaseId": "YOUR_DATABASE_ID_HERE"
+    }
+}

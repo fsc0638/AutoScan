@@ -1,0 +1,45 @@
+/* ==========================================
+   Background Full Screen Fix
+   ========================================== */
+html {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 100vh !important;
+    width: 100vw !important;
+    overflow-x: hidden !important;
+    background: url('background.png') no-repeat center center fixed !important;
+    background-size: cover !important;
+    background-attachment: fixed !important;
+    position: relative;
+}
+
+/* Ensure background covers entire viewport */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: url('background.png') no-repeat center center;
+    background-size: cover;
+    background-attachment: fixed;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Reset container to not add extra margins */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--spacing-lg);
+    position: relative;
+    z-index: 1;
+}

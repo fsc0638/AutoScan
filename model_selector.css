@@ -1,0 +1,52 @@
+/* ==========================================
+   Simplified Language Model Selection
+   ========================================== */
+.model-selector-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-md);
+}
+
+.selector-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-xs);
+}
+
+.selector-group label {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.model-select {
+    background: var(--bg-medium);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: var(--spacing-sm);
+    font-family: inherit;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.model-select:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-light);
+}
+
+.model-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(147, 51, 234, 0.1);
+}
+
+/* Responsive: Stack on mobile */
+@media (max-width: 768px) {
+    .model-selector-container {
+        grid-template-columns: 1fr;
+    }
+}

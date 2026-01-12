@@ -1,0 +1,20 @@
+{
+  "name": "autoscan",
+  "version": "1.0.0",
+  "description": "AutoScan 是一個智能文件分析系統，利用最新的 AI 模型（Gemini 與 OpenAI）為您快速提取文件中的關鍵重點。系統支援多種輸入方式與檔案格式，並能無縫整合至 Notion 資料庫，是提升工作效率的強力助手。",
+  "main": "ai-api.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "body-parser": "^2.2.2",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "node-fetch": "^2.7.0"
+  }
+}
