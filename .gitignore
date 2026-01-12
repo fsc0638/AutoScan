@@ -22,9 +22,9 @@ yarn-error.log*
 *.tmp
 *.log
 *.bak
-add_*.py
-update_*.py
-upload_*.css
+scripts/add_*.py
+scripts/update_*.py
+scripts/upload_*.css
 model_styles.css
 
 # IDE

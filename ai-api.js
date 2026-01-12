@@ -573,18 +573,3 @@ async function callOpenAIAssistant(text, assistantId, apiKey) {
         throw error;
     }
 }
-
-/**
- * Get language name from language code
- * @param {string} lang - Language code
- * @returns {string} Language name
- */
-function getLanguageName(lang) {
-    const names = {
-        'zh-TW': '繁體中文',
-        'zh-CN': '简体中文',
-        'en': 'English',
-        'ja': '日本語'
-    };
-    return names[lang] || '繁體中文';
-}
