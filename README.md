@@ -1,6 +1,10 @@
-# 📄 AutoScan - 文件重點分析系統
+# 📄# AutoScan 文件重點分析系統
 
-## 📋 專案概述
+> **⚠️ Known Issues (Demo Version)**
+> 1. **File Import**: 目前 PDF 與 Word 檔案匯入功能暫時無法運作，請直接貼上文字內容進行分析。
+> 2. **OpenAI Agent**: OpenAI Agent 模式暫時無法連結，請使用 Gemini 模型或 OpenAI 一般模式。
+
+## 專案簡介📋 專案概述
 
 AutoScan 是一個智能文件分析系統，利用最新的 AI 模型（Gemini 與 OpenAI）為您快速提取文件中的關鍵重點。系統支援多種輸入方式與檔案格式，並能無縫整合至 Notion 資料庫，是提升工作效率的強力助手。
 
