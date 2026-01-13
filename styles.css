@@ -1616,3 +1616,24 @@ textarea.edit-field.simple-item {
     }
 }
 
+
+/* Fix for Date Input on Dark Backgrounds */
+.edit-field.date {
+  color-scheme: dark;
+  background-color: rgba(255, 255, 255, 0.05); /* Slight tint to match other fields */
+  color: #fff;
+}
+
+
+/* Fix alignment for status field */
+.meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.field-group {
+  margin-right: 0;
+  width: 100%;
+}
+
