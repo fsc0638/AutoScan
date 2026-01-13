@@ -1637,3 +1637,68 @@ textarea.edit-field.simple-item {
   width: 100%;
 }
 
+
+/* ==========================================
+   UI Improvements (Overrides)
+   ========================================== */
+
+/* 1. Horizontal layout for selectors */
+.model-selector-container {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 25px;
+    margin-bottom: 25px; /* Add breathing room */
+}
+
+/* 2. Horizontal label + select */
+.selector-group {
+    display: flex;
+    flex-direction: row !important; /* Override column */
+    align-items: center;
+    gap: 12px;
+}
+
+.selector-group label {
+    margin-bottom: 0 !important;
+    font-size: 1rem;
+    white-space: nowrap;
+}
+
+/* 3. Better select styling */
+.model-select {
+    height: 40px;
+    padding: 0 12px;
+    min-width: 160px;
+}
+
+/* Agent selector needs more width */
+#modelAgent {
+    min-width: 220px;
+}
+
+/* 4. Status Message Loading Animation */
+.status-message.loading {
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+    background-color: rgba(147, 51, 234, 0.1); /* Primary color opacity */
+    border: 1px solid rgba(147, 51, 234, 0.3);
+    color: #e9d5ff; /* Light purple text */
+}
+
+/* Spinner Icon */
+.status-message.loading::before {
+    content: '';
+    width: 18px;
+    height: 18px;
+    border: 2px solid #a855f7;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+

@@ -10,6 +10,7 @@
 // ==========================================
 let transcript = '';
 let currentKeyPoints = [];
+let statusTimeout = null; // Fix for status message race conditions
 
 // ==========================================
 // 2. DOM Elements
@@ -322,7 +323,7 @@ async function handleUploadToNotion() {
     return;
   }
 
-  showStatus('正在上傳至 Notion...', 'info');
+  showStatus('正在上傳至 Notion...', 'loading');
   try {
     const result = await uploadToNotionAPI(currentKeyPoints, notionConfig);
 
@@ -604,11 +605,23 @@ async function uploadSimpleDataToNotion(points, config, isLocalhost) {
 
 function showStatus(message, type = 'info') {
   if (!elements.statusMessage) return;
+
+  // Clear any pending timeout to prevent hiding the new status prematurely
+  if (statusTimeout) {
+    clearTimeout(statusTimeout);
+    statusTimeout = null;
+  }
+
   elements.statusMessage.textContent = message;
-  elements.statusMessage.className = `status-message status-${type}`;
-  elements.statusMessage.style.display = 'block';
-  if (type !== 'info') {
-    setTimeout(() => {
+  // Use simple class name to match CSS (.status-message.success etc.)
+  elements.statusMessage.className = `status-message ${type}`;
+
+  // Ensure display is block/flex (CSS loading uses flex)
+  elements.statusMessage.style.display = type === 'loading' ? 'flex' : 'block';
+
+  // Only auto-hide for success/error events, keep info/loading persistent
+  if (type === 'success' || type === 'error') {
+    statusTimeout = setTimeout(() => {
       elements.statusMessage.style.display = 'none';
     }, 5000);
   }
