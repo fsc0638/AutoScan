@@ -7,7 +7,13 @@
  * @param {string} text - Text to analyze
  * @returns {Promise<Array>} Array of key points
  */
-async function callAIModel(text) {
+/**
+ * Call AI model to analyze text and extract key points
+ * @param {string} text - Text to analyze
+ * @param {string} targetLanguage - Target output language
+ * @returns {Promise<Array>} Array of key points
+ */
+async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     const model = getSelectedModel();
     const providerConfig = await getModelConfig(model.provider);
 
@@ -44,14 +50,16 @@ async function callAIModel(text) {
         if (model.provider === 'gemini') {
             const targetModel = model.agent !== 'default' ? model.agent : modelVersion;
             // Pass agentLabel to determine if we should use structured output
-            return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel);
+            return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
         } else if (model.provider === 'openai') {
             if (model.agent !== 'default') {
                 // Use Assistants API for configured agents
-                return await callOpenAIAssistant(text, model.agent, apiKey);
+                const agentConfig = providerConfig.agents[model.agent];
+                return await callOpenAIAssistant(text, agentConfig.assistantId, apiKey, targetLanguage);
+            } else {
+                // Use Chat Completion API
+                return await callOpenAIAPI(text, modelVersion, apiKey, targetLanguage);
             }
-            // Fallback to Chat Completions API
-            return await callOpenAIAPI(text, modelVersion, apiKey);
         } else {
             throw new Error('不支援的語言模型');
         }
@@ -94,7 +102,16 @@ async function getModelConfig(provider) {
  * @param {string} agentLabel - Agent label to determine behavior
  * @returns {Promise<Array>} Key points or structured data
  */
-async function callGeminiAPI(text, modelId, apiKey, agentLabel = '') {
+/**
+ * Call Gemini API
+ * @param {string} text - Text to analyze
+ * @param {string} modelId - Gemini model ID
+ * @param {string} apiKey - API key
+ * @param {string} agentLabel - Agent label to determine behavior
+ * @param {string} targetLanguage - Target language for output
+ * @returns {Promise<Array>} Key points or structured data
+ */
+async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLanguage = 'Traditional Chinese') {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
     // Forced to v1beta to ensure compatibility with both standard and tuned models
@@ -115,6 +132,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '') {
     const useStructuredOutput = agentLabel.includes('AutoScan');
 
     let systemInstruction = null;
+    let userPrompt = text;
 
     if (useStructuredOutput) {
         // System Instructions for Notion data structuring (only for AutoScan Agent)
@@ -124,7 +142,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '') {
 # Constraints (核心約束)
 1. **禁止堆疊**：嚴禁將所有資訊塞入 ToDo 欄位。ToDo 欄位僅能保留「具體動作的短句」。
 2. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-3. **翻譯與繁體化**：所有輸出必須為 [繁體中文]。
+3. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
 4. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
 
 # Field Mapping Logic (欄位對齊邏輯)
@@ -154,6 +172,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '') {
         console.log('[Gemini API] Using structured output mode for AutoScan Agent');
     } else {
         console.log('[Gemini API] Using simple prompt mode');
+        userPrompt = `Please analyze the following text and provide key points. Ensure the output is in ${targetLanguage}.\n\n${text}`;
     }
 
     // Build request body
@@ -205,8 +224,16 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '') {
  * @param {string} apiKey - API key
  * @returns {Promise<Array>} Key points
  */
-async function callOpenAIAPI(text, modelVersion, apiKey) {
-    const prompt = `Analyze and extract key points:\n\n${text}`;
+/**
+ * Call OpenAI API
+ * @param {string} text - Text to analyze
+ * @param {string} modelVersion - OpenAI model version
+ * @param {string} apiKey - API key
+ * @param {string} targetLanguage - Target output language
+ * @returns {Promise<Array>} Key points
+ */
+async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Traditional Chinese') {
+    const prompt = `Analyze and extract key points. Output language: ${targetLanguage}.\n\n${text}`;
 
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const url = isLocalhost ? '/api/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
@@ -485,7 +512,7 @@ function showStatusMessage(message, type = 'info') {
  * @param {string} apiKey - API key
  * @returns {Promise<Array>} Key points
  */
-async function callOpenAIAssistant(text, assistantId, apiKey) {
+async function callOpenAIAssistant(text, assistantId, apiKey, targetLanguage = 'Traditional Chinese') {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const baseUrl = isLocalhost ? '/api/openai/v1' : 'https://api.openai.com/v1';
 
@@ -500,7 +527,12 @@ async function callOpenAIAssistant(text, assistantId, apiKey) {
         const threadResponse = await fetch(`${baseUrl}/threads`, {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify({})
+            body: JSON.stringify({
+                messages: [{
+                    role: 'user',
+                    content: `Please output in ${targetLanguage}.`
+                }]
+            })
         });
 
         if (!threadResponse.ok) {

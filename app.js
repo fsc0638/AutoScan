@@ -193,7 +193,15 @@ async function startAnalysis() {
       throw new Error('找不到 AI 模組 (ai-api.js)');
     }
 
-    const keyPoints = await window.callAIModel(textToAnalyze);
+    // Get selected language
+    const langCode = elements.languageSelect.value;
+    const targetLanguage = typeof window.getLanguageName === 'function'
+      ? window.getLanguageName(langCode)
+      : 'Traditional Chinese (Taiwan)';
+
+    console.log(`[App] Analyzing in language: ${targetLanguage} (${langCode})`);
+
+    const keyPoints = await window.callAIModel(textToAnalyze, targetLanguage);
 
     if (keyPoints && keyPoints.length > 0) {
       currentKeyPoints = keyPoints;
