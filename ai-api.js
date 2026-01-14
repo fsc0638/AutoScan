@@ -27,8 +27,14 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     // AGENT MODE LOGIC (Toggle ON)
     // ==========================================
     if (model.useAgent) {
-        // As per requirement: "Do not move yet" / Placeholder
-        throw new Error("Agent Mode 尚未實裝，請關閉「調用 Agent」開關以使用標準分析功能");
+        // 呼叫獨立的 Vertex AI Agent 模組
+        // 此模組與現有邏輯完全隔離
+        if (typeof window.callVertexAgent === 'function') {
+            console.log('[AI API] Routing to Vertex AI Agent...');
+            return await window.callVertexAgent(text);
+        } else {
+            throw new Error("Vertex AI Agent 模組未載入，請確認 vertex-agent-api.js 已正確引入");
+        }
     }
 
     // ==========================================
@@ -81,6 +87,13 @@ async function getModelConfig(provider) {
     return null;
 }
 
+// ==========================================
+// ⚠️ STABLE CODE - DO NOT MODIFY
+// 標準模式分析功能 (Toggle OFF)
+// 此區域已完成測試並穩定運行，包含：
+// - System Instruction (翻譯功能)
+// - Gemini API 呼叫邏輯
+// ==========================================
 /**
  * Call Gemini API (Standard Strict Mode)
  * @param {string} text - Text to analyze
@@ -106,6 +119,7 @@ async function callGeminiAPI(text, modelId, apiKey, targetLanguage = 'Traditiona
     const url = `${baseUrl}?key=${apiKey}`;
 
     console.log('[Gemini API] Using AutoScan Agent System Instruction (Standard Mode)');
+    console.log('[Gemini API] Target Language:', targetLanguage);
 
     // AutoScan Agent System Instruction - Enhanced to extract ALL items
     const systemInstruction = `# Role
@@ -118,7 +132,15 @@ async function callGeminiAPI(text, modelId, apiKey, targetLanguage = 'Traditiona
 1. **多筆輸出**：一份會議記錄應輸出多個 JSON 物件，每個物件代表一個獨立的行動項目。
 2. **禁止堆疊**：嚴禁將所有資訊塞入單一 ToDo 欄位。每個行動項目都應該是獨立的物件。
 3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-4. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
+4. **語言翻譯（極度重要）**：
+   - **100% 完整翻譯**：所有輸出內容必須完全翻譯成「${targetLanguage}」，不得保留任何原語言文字
+   - **專有名詞處理**：
+     * 公司名稱、人名、地名等專有名詞也必須翻譯或音譯
+     * 日文專有名詞請翻譯成中文或進行音譯（例：「パラレルレンタル」→「平行租賃」、「日本経済新聞」→「日本經濟新聞」）
+     * 保持語意清晰，必要時可在括號內附註原文
+   - **完整翻譯範例**：
+     * ❌ 錯誤：「進行グローバルソーツ的會議」
+     * ✅ 正確：「進行全球體育（グローバルソーツ）的會議」或「進行全球體育的會議」
 5. **輸出格式**：嚴格遵守 JSON 格式。僅輸出純 JSON 陣列，不要包含 Markdown 標籤或開場白。
 
 # Field Mapping Logic (欄位對齊邏輯)
@@ -190,6 +212,8 @@ async function callGeminiAPI(text, modelId, apiKey, targetLanguage = 'Traditiona
     const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     console.log('[Gemini API] Raw Response:', generatedText);
+
+    // ⚠️ END OF STABLE CODE - Standard Mode完整邏輯結束
 
     // Always use robust parsing (handles JSON or Text)
     return parseStructuredOutput(generatedText);

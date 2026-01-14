@@ -226,9 +226,15 @@ async function startAnalysis() {
   }
 }
 
+
 // ==========================================
-// 6. File Handling
+// ⚠️ STABLE CODE - DO NOT MODIFY
+// 6. File Handling (檔案處理功能)
+// 此區域已完成測試並穩定運行，包含：
+// - TXT, PDF, Word 檔案讀取
+// - 檔案大小限制 (5MB)
 // ==========================================
+
 
 function handleFile(file) {
   // Update file info UI

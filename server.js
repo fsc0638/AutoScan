@@ -7,9 +7,10 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
-// Enable CORS and JSON parsing
+// Enable CORS and JSON parsing with increased limit
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' }));
+app.use(bodyParser.urlencoded({ limit: '5mb', extended: true }));
 
 // Serve static files from the project root
 app.use(express.static(__dirname));
@@ -367,6 +368,132 @@ app.post('/api/notion/structured', async (req, res) => {
         console.error('[Server] Internal Error:', error);
         res.status(500).json({ message: error.message });
     }
+});
+
+// ============================================
+// Vertex AI Agent Integration (Isolated Module)
+// ============================================
+
+const { GoogleAuth } = require('google-auth-library');
+const fs = require('fs');
+
+// Load Service Account for Vertex AI
+let vertexAuth = null;
+const SERVICE_ACCOUNT_PATH = path.join(__dirname, 'service-account-key.json');
+
+if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
+    vertexAuth = new GoogleAuth({
+        keyFilename: SERVICE_ACCOUNT_PATH,
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+    });
+    console.log('[Server] Vertex AI Service Account loaded');
+} else {
+    console.warn('[Server] No service-account-key.json found, Vertex AI Agent will not work');
+}
+
+/**
+ * Vertex AI Agent Query Endpoint
+ * POST /api/vertex-agent/query
+ */
+app.post('/api/vertex-agent/query', async (req, res) => {
+    console.log('[Server] Vertex Agent query received');
+
+    const { query, projectId, location, engineId, dataStoreId } = req.body;
+
+    if (!query || !projectId || !engineId) {
+        return res.status(400).json({ message: 'Missing required fields: query, projectId, engineId' });
+    }
+
+    if (!vertexAuth) {
+        return res.status(500).json({ message: 'Vertex AI Service Account not configured' });
+    }
+
+    try {
+        // Get access token
+        const client = await vertexAuth.getClient();
+        const accessToken = await client.getAccessToken();
+
+        // Vertex AI Agent Builder - Conversational Search API
+        // Reference: https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/projects.locations.dataStores.conversations/converse
+        // Using dataStores endpoint instead of engines
+        const apiUrl = `https://discoveryengine.googleapis.com/v1beta/projects/${projectId}/locations/${location}/collections/default_collection/dataStores/${dataStoreId}/conversations/-:converse`;
+
+        console.log('[Server] Calling Vertex Agent API:', apiUrl);
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken.token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                query: {
+                    input: query
+                },
+                // Request structured output if possible
+                summarySpec: {
+                    summaryResultCount: 5,
+                    includeCitations: false
+                },
+                // Use the agent's grounding capability
+                safeSearch: false
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('[Server] Vertex Agent API Error:', JSON.stringify(data, null, 2));
+            return res.status(response.status).json(data);
+        }
+
+        console.log('[Server] Vertex Agent API Success');
+        console.log('[Server] Response:', JSON.stringify(data, null, 2));
+
+        // Extract reply from conversational response
+        const reply = data.reply?.reply || data.reply?.summary?.summaryText || data.reply || '';
+
+        res.json({
+            answer: reply,
+            conversationId: data.conversation?.name,
+            raw: data
+        });
+
+    } catch (error) {
+        console.error('[Server] Vertex Agent Error:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
+
+/**
+ * Vertex AI Agent Health Check
+ * GET /api/vertex-agent/health
+ */
+app.get('/api/vertex-agent/health', async (req, res) => {
+    if (!vertexAuth) {
+        return res.status(503).json({ status: 'unavailable', message: 'Service Account not configured' });
+    }
+
+    try {
+        const client = await vertexAuth.getClient();
+        await client.getAccessToken();
+        res.json({ status: 'ok', message: 'Vertex AI Agent is available' });
+    } catch (error) {
+        res.status(503).json({ status: 'error', message: error.message });
+    }
+});
+
+/**
+ * Cloud Storage Upload Endpoint (Placeholder)
+ * POST /api/gcs/upload
+ */
+app.post('/api/gcs/upload', async (req, res) => {
+    // TODO: Implement Cloud Storage upload
+    // This requires user to provide bucket name
+    res.status(501).json({
+        message: 'Cloud Storage upload not yet configured. Please provide bucket name.',
+        status: 'not_implemented'
+    });
 });
 
 app.listen(PORT, () => {
