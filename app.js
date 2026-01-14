@@ -323,6 +323,10 @@ async function handlePdfFile(file) {
 
 // ==========================================
 // 7. Notion Integration
+//
+// LOCKED AREA: NOTION INTEGRATION
+// Do not modify the data mapping or API interaction flow
+// to maintain consistency with the master branch.
 // ==========================================
 
 async function handleUploadToNotion() {
