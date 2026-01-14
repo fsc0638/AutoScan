@@ -219,7 +219,7 @@ async function startAnalysis() {
 
       // Hook: Initialize charts if logic is available
       if (typeof window.initCharts === 'function') {
-        window.initCharts(keyPoints);
+        window.initCharts(keyPoints, transcript);
       }
 
       // Show Notion button if configured

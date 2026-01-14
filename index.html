@@ -18,6 +18,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <!-- Chart.js for data visualization -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Word Cloud library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
   <link rel="stylesheet" href="charts.css">
 </head>
 
@@ -148,6 +150,16 @@
       </div>
       <div id="chartsContainer" class="charts-grid">
         <!-- Charts will be injected here -->
+      </div>
+
+      <!-- New Keyword specific section -->
+      <div class="keyword-viz-container">
+        <div class="chart-wrapper full-width">
+          <h3>☁️ 關鍵字文字雲</h3>
+          <div class="word-cloud-container">
+            <canvas id="wordCloudCanvas"></canvas>
+          </div>
+        </div>
       </div>
     </div>
   </div>
