@@ -5,11 +5,6 @@
 /**
  * Call AI model to analyze text and extract key points
  * @param {string} text - Text to analyze
- * @returns {Promise<Array>} Array of key points
- */
-/**
- * Call AI model to analyze text and extract key points
- * @param {string} text - Text to analyze
  * @param {string} targetLanguage - Target output language
  * @returns {Promise<Array>} Array of key points
  */
@@ -20,27 +15,27 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     // Determine the API Key: Priority: Agent's specific key > Provider's global key
     let apiKey = providerConfig?.apiKey;
 
-    // If a specific agent is selected, look for its dedicated API Key in the config
-    if (model.agent !== 'default') {
-        const agents = providerConfig?.agents || [];
-        // Support both array and object formats
-        const agentList = Array.isArray(agents) ? agents : (agents[model.agent] ? [agents[model.agent]] : []);
-        const selectedAgentConfig = agentList.find(a => (a.agentKey === model.agent || a.assistantId === model.agent || a.key === model.agent || a.id === model.agent));
-
-        if (selectedAgentConfig && selectedAgentConfig.apiKey) {
-            apiKey = selectedAgentConfig.apiKey;
-            console.log(`Using dedicated API Key for agent: ${model.agentLabel}`);
-        }
-    }
-
+    // Standard API Key Logic
     if (!apiKey) {
         throw new Error(`未設定 ${model.provider} API 金鑰`);
     }
 
     console.log(`Using ${model.agentLabel} (${model.agent}) for analysis...`);
+    console.log(`Agent Mode Enabled: ${model.useAgent}`);
 
+    // ==========================================
+    // AGENT MODE LOGIC (Toggle ON)
+    // ==========================================
+    if (model.useAgent) {
+        // As per requirement: "Do not move yet" / Placeholder
+        throw new Error("Agent Mode 尚未實裝，請關閉「調用 Agent」開關以使用標準分析功能");
+    }
+
+    // ==========================================
+    // STANDARD MODE LOGIC (Toggle OFF)
+    // ==========================================
     const defaultVersions = {
-        gemini: 'gemini-2.0-flash-exp',
+        gemini: 'gemini-2.0-flash-exp', // Default to 2.0 Flash as it was stable in main
         openai: 'gpt-4o'
     };
 
@@ -49,17 +44,10 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     try {
         if (model.provider === 'gemini') {
             const targetModel = model.agent !== 'default' ? model.agent : modelVersion;
-            // Pass agentLabel to determine if we should use structured output
-            return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
+            // STRICTLY use Standard Mode (no agentLabel passing for logic detection)
+            return await callGeminiAPI(text, targetModel, apiKey, targetLanguage);
         } else if (model.provider === 'openai') {
-            if (model.agent !== 'default') {
-                // Use Assistants API for configured agents
-                const agentConfig = providerConfig.agents[model.agent];
-                return await callOpenAIAssistant(text, agentConfig.assistantId, apiKey, targetLanguage);
-            } else {
-                // Use Chat Completion API
-                return await callOpenAIAPI(text, modelVersion, apiKey, targetLanguage);
-            }
+            return await callOpenAIAPI(text, modelVersion, apiKey, targetLanguage);
         } else {
             throw new Error('不支援的語言模型');
         }
@@ -75,7 +63,6 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
  * @returns {Promise<Object>} Configuration object
  */
 async function getModelConfig(provider) {
-    // Wait for configManager to load if not ready
     if (!window.configManager || !window.configManager.loaded) {
         console.log('Waiting for configuration to load...');
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -95,29 +82,19 @@ async function getModelConfig(provider) {
 }
 
 /**
- * Call Gemini API
+ * Call Gemini API (Standard Strict Mode)
  * @param {string} text - Text to analyze
  * @param {string} modelId - Gemini model ID
  * @param {string} apiKey - API key
- * @param {string} agentLabel - Agent label to determine behavior
- * @returns {Promise<Array>} Key points or structured data
- */
-/**
- * Call Gemini API
- * @param {string} text - Text to analyze
- * @param {string} modelId - Gemini model ID
- * @param {string} apiKey - API key
- * @param {string} agentLabel - Agent label to determine behavior
  * @param {string} targetLanguage - Target language for output
- * @returns {Promise<Array>} Key points or structured data
+ * @returns {Promise<Array>} Key points
  */
-async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLanguage = 'Traditional Chinese') {
+async function callGeminiAPI(text, modelId, apiKey, targetLanguage = 'Traditional Chinese') {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-    // Forced to v1beta to ensure compatibility with both standard and tuned models
+    // Forced to v1beta to ensure compatibility
     const apiVersion = 'v1beta';
 
-    // Improved path handling: if it already looks like a model path, keep it; otherwise prepend 'models/'
     const modelPath = (modelId.startsWith('models/') || modelId.startsWith('tunedModels/'))
         ? modelId
         : `models/${modelId}`;
@@ -128,70 +105,73 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
 
     const url = `${baseUrl}?key=${apiKey}`;
 
-    // Determine if we should use structured output based on agent name
-    const useStructuredOutput = agentLabel.includes('AutoScan');
+    console.log('[Gemini API] Using AutoScan Agent System Instruction (Standard Mode)');
 
-    let systemInstruction = null;
-    let userPrompt = text;
+    // AutoScan Agent System Instruction - Enhanced to extract ALL items
+    const systemInstruction = `# Role
+你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容」拆解為**多個**獨立的行動項目，每個項目對應一筆 Notion 資料庫記錄。
 
-    if (useStructuredOutput) {
-        // System Instructions for Notion data structuring (only for AutoScan Agent)
-        systemInstruction = `# Role
-你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
+# 核心任務
+**從會議逐字稿中提取所有可識別的行動項目、待辦事項、決議事項**。一份會議記錄通常會有 5-20 個不等的行動項目，請務必全部提取，不要遺漏。
 
 # Constraints (核心約束)
-1. **禁止堆疊**：嚴禁將所有資訊塞入 ToDo 欄位。ToDo 欄位僅能保留「具體動作的短句」。
-2. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-3. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
-4. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
+1. **多筆輸出**：一份會議記錄應輸出多個 JSON 物件，每個物件代表一個獨立的行動項目。
+2. **禁止堆疊**：嚴禁將所有資訊塞入單一 ToDo 欄位。每個行動項目都應該是獨立的物件。
+3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
+4. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
+5. **輸出格式**：嚴格遵守 JSON 格式。僅輸出純 JSON 陣列，不要包含 Markdown 標籤或開場白。
 
 # Field Mapping Logic (欄位對齊邏輯)
-- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約）。
-- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動）。
-- **ToDo (String)**: 僅提取「核心行動」，字數需精簡（例：與日本政府簽約）。
-- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。
-- **負責人 (Person)**: 提取提到的個人或實體（例：凱衛）。
-- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。
-- **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
+- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、法說會、研討會）。
+- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Goonas合作案、12/18簽約儀式）。
+- **ToDo (String)**: 提取「重點大意」，字數不需過於精簡，約50字以下。
+- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。分析語意提到相似於["完成"、"已完成"、"完成"、"已結案"、"已結案"、"已結束"、"進行中"、"處理中"、"進行中"]詞彙。
+- **負責人 (Person)**: 提取語意中提到的單位、個人、實體、公司部門（例：凱衛、文龍、Jason、財務部...）。
+- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「12/18」則輸出當前年度的 12-18。
+- **建立時間 (DateTime)**: 使用 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
 
-# JSON Output Structure
+# JSON Output Structure (輸出多個物件)
 [
   {
     "operation": "CREATE",
     "properties": {
-      "歸屬分類": ["String"],
-      "專案": ["String"],
-      "ToDo": "String (簡短行動)",
-      "狀態": "未開始" | "進行中" | "完成",
-      "負責人": "String",
-      "到期日": "YYYY-MM-DD",
-      "建立時間": "YYYY-MM-DD HH:mm:ss"
+      "歸屬分類": ["商務簽約"],
+      "專案": ["Goonas合作案"],
+      "ToDo": "與日本公司簽約",
+      "狀態": "未開始",
+      "負責人": "凱衛",
+      "到期日": "2026-12-18",
+      "建立時間": "2026-01-14 11:00:00"
+    }
+  },
+  {
+    "operation": "CREATE",
+    "properties": {
+      "歸屬分類": ["法說會"],
+      "專案": ["Q4財報發表"],
+      "ToDo": "準備法說會簡報",
+      "狀態": "未開始",
+      "負責人": "財務部",
+      "到期日": "2026-12-02",
+      "建立時間": "2026-01-14 11:00:00"
     }
   }
-]`;
-        console.log('[Gemini API] Using structured output mode for AutoScan Agent');
-    } else {
-        console.log('[Gemini API] Using simple prompt mode');
-        userPrompt = `Please analyze the following text and provide key points. Ensure the output is in ${targetLanguage}.\n\n${text}`;
-    }
+]
 
-    // Build request body
+**重要提醒**：請確保輸出陣列包含所有從會議中識別到的行動項目。`;
+
     const requestBody = {
         contents: [{
             parts: [{
                 text: text
             }]
-        }]
-    };
-
-    // Add system instruction only if using structured output
-    if (systemInstruction) {
-        requestBody.system_instruction = {
+        }],
+        system_instruction: {
             parts: [{
                 text: systemInstruction
             }]
-        };
-    }
+        }
+    };
 
     const response = await fetch(url, {
         method: 'POST',
@@ -209,23 +189,14 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
     const data = await response.json();
     const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
-    // Parse based on output mode
-    if (useStructuredOutput) {
-        return parseStructuredOutput(generatedText);
-    } else {
-        return parseKeyPoints(generatedText);
-    }
+    console.log('[Gemini API] Raw Response:', generatedText);
+
+    // Always use robust parsing (handles JSON or Text)
+    return parseStructuredOutput(generatedText);
 }
 
 /**
- * Call OpenAI API
- * @param {string} text - Text to analyze
- * @param {string} modelVersion - OpenAI model version
- * @param {string} apiKey - API key
- * @returns {Promise<Array>} Key points
- */
-/**
- * Call OpenAI API
+ * Call OpenAI API (Standard Strict Mode)
  * @param {string} text - Text to analyze
  * @param {string} modelVersion - OpenAI model version
  * @param {string} apiKey - API key
@@ -233,6 +204,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
  * @returns {Promise<Array>} Key points
  */
 async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Traditional Chinese') {
+    // Simple prompt for OpenAI (Same as Main Branch)
     const prompt = `Analyze and extract key points. Output language: ${targetLanguage}.\n\n${text}`;
 
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -263,17 +235,14 @@ async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Tradi
     const data = await response.json();
     const generatedText = data.choices[0].message.content;
 
-    return parseKeyPoints(generatedText);
+    return parseStructuredOutput(generatedText);
 }
 
 /**
- * Parse structured JSON output from Gemini for Notion
- * @param {string} text - Generated text with JSON structure
- * @returns {Array} Array of structured objects or fallback to simple key points
+ * Parse structured JSON output (Helper for future Agent Mode & Robust Standard Mode)
  */
 function parseStructuredOutput(text) {
     try {
-        // Remove markdown code block tags if present
         let cleanedText = text.trim();
         if (cleanedText.startsWith('```json')) {
             cleanedText = cleanedText.replace(/^```json\n/, '').replace(/\n```$/, '');
@@ -281,24 +250,32 @@ function parseStructuredOutput(text) {
             cleanedText = cleanedText.replace(/^```\n/, '').replace(/\n```$/, '');
         }
 
-        // Try to parse as JSON
         const jsonData = JSON.parse(cleanedText);
 
-        // Validate it's an array
         if (Array.isArray(jsonData) && jsonData.length > 0) {
-            console.log('[AI API] Parsed structured JSON output:', jsonData);
+            // Check if it's a simple string array (Gemini sometimes returns this even if not asked strings)
+            if (typeof jsonData[0] === 'string') {
+                return jsonData.map(line => cleanKeyPoint(line));
+            }
+            // Otherwise assume it's the structured object format
             return jsonData;
         }
-
-        // If not valid array, fall back to simple parsing
-        console.warn('[AI API] JSON is not an array, falling back to simple parsing');
         return parseKeyPoints(text);
-
     } catch (error) {
-        // If JSON parsing fails, fall back to simple key points parsing
-        console.warn('[AI API] Failed to parse as JSON, falling back to simple parsing:', error.message);
+        // Fallback to text parsing
         return parseKeyPoints(text);
     }
+}
+
+/**
+ * Helper to clean a single key point string
+ */
+function cleanKeyPoint(line) {
+    return line
+        .replace(/^[-*•]\s*/, '')
+        .replace(/^\d+[\.)]\s*/, '')
+        .replace(/^[一二三四五六七八九十]+[、.]\s*/, '')
+        .trim();
 }
 
 /**
@@ -307,28 +284,18 @@ function parseStructuredOutput(text) {
  * @returns {Array} Array of key point strings
  */
 function parseKeyPoints(text) {
-    // Split by newlines and filter empty lines
     const lines = text
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0);
 
-    // Remove bullet points, numbers, and other markers
-    const keyPoints = lines.map(line => {
-        return line
-            .replace(/^[-*•]\s*/, '')  // Remove bullet points
-            .replace(/^\d+[\.)]\s*/, '') // Remove numbers
-            .replace(/^[一二三四五六七八九十]+[、.]\s*/, '') // Remove Chinese numbers
-            .trim();
-    }).filter(point => point.length > 0);
+    const keyPoints = lines.map(line => cleanKeyPoint(line)).filter(point => point.length > 0);
 
     return keyPoints;
 }
 
 /**
  * Get language name from language code
- * @param {string} langCode - Language code
- * @returns {string} Language name
  */
 function getLanguageName(langCode) {
     const langMap = {
@@ -345,7 +312,6 @@ function getLanguageName(langCode) {
 /**
  * Display key points in UI - supports both simple array and structured JSON
  * Now renders editable inputs instead of static text
- * @param {Array} keyPoints - Array of key point strings or structured objects
  */
 function displayKeyPoints(keyPoints) {
     const container = document.getElementById('keyPointsContainer');
@@ -358,12 +324,12 @@ function displayKeyPoints(keyPoints) {
 
     currentKeyPoints = keyPoints;
 
-    // Determine if we have structured data or simple strings
+    // Check structure
     const isStructured = keyPoints.length > 0 && typeof keyPoints[0] === 'object' && keyPoints[0].properties;
 
     let html;
     if (isStructured) {
-        // Display structured data with multiple editable fields
+        // Display structured data with multiple editable fields (AutoScan Agent Mode)
         html = `
     <div class="key-points-list">
       ${keyPoints.map((item, index) => {
@@ -374,19 +340,19 @@ function displayKeyPoints(keyPoints) {
           <div class="key-point-content">
             <!-- ToDo / Title -->
             <div class="field-group full-width">
-                <input type="text" class="edit-field title" value="${escapeHtmlAttribute(props.ToDo || '')}" placeholder="待辦事項標題" data-field="ToDo">
+                <input type="text" class="edit-field title" value="${escapeHtmlAttribute(props.ToDo || '')}" placeholder="請輸入標題" data-field="ToDo">
             </div>
-            
+
             <div class="meta-row">
                 <!-- 歸屬分類 -->
                 <div class="field-group">
                     <span class="field-icon">🏷️</span>
-                    <input type="text" class="edit-field tag" value="${escapeHtmlAttribute((props.歸屬分類 || []).join(', '))}" placeholder="分類 (逗號分隔)" data-field="歸屬分類">
+                    <input type="text" class="edit-field tag" value="${escapeHtmlAttribute((props.歸屬分類 || []).join(', '))}" placeholder="分類 (逗號)" data-field="歸屬分類">
                 </div>
 
                 <!-- 專案 -->
                 <div class="field-group">
-                    <span class="field-icon">🚀</span>
+                    <span class="field-icon">📁</span>
                     <input type="text" class="edit-field project" value="${escapeHtmlAttribute((props.專案 || []).join(', '))}" placeholder="專案" data-field="專案">
                 </div>
             </div>
@@ -406,7 +372,7 @@ function displayKeyPoints(keyPoints) {
 
                 <!-- 狀態 -->
                 <div class="field-group">
-                    <span class="field-icon">🔄</span>
+                    <span class="field-icon">📊</span>
                     <select class="edit-field status" data-field="狀態">
                         <option value="未開始" ${props.狀態 === '未開始' ? 'selected' : ''}>未開始</option>
                         <option value="進行中" ${props.狀態 === '進行中' ? 'selected' : ''}>進行中</option>
@@ -444,211 +410,38 @@ function displayKeyPoints(keyPoints) {
         copyBtn.style.display = 'inline-flex';
     }
 
-    console.log(`✅ Displayed ${keyPoints.length} editable items`);
+    console.log(`Displayed ${keyPoints.length} editable items`);
 }
 
-/**
- * Helper to escape HTML attributes
- */
 function escapeHtmlAttribute(text) {
     if (!text) return '';
     return text.toString().replace(/"/g, '&quot;');
 }
 
-/**
- * Escape HTML to prevent XSS
- * @param {string} text - Text to escape
- * @returns {string} Escaped text
- */
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-/**
- * Copy key points to clipboard
- */
 function copyKeyPointsToClipboard() {
     if (!currentKeyPoints || currentKeyPoints.length === 0) {
         alert('沒有重點可以複製');
         return;
     }
-
-    const text = currentKeyPoints
-        .map((point, index) => `${index + 1}. ${point}`)
-        .join('\n');
-
+    const text = currentKeyPoints.map((point, index) => `${index + 1}. ${point}`).join('\n');
     navigator.clipboard.writeText(text).then(() => {
         showStatusMessage('已複製到剪貼簿', 'success');
     }).catch(err => {
         console.error('Failed to copy:', err);
-        showStatusMessage('複製失敗', 'error');
     });
 }
 
-/**
- * Show status message
- * @param {string} message - Message to show
- * @param {string} type - Message type (success, error, info)
- */
 function showStatusMessage(message, type = 'info') {
     const statusDiv = document.getElementById('statusMessage');
     if (!statusDiv) return;
-
     statusDiv.textContent = message;
     statusDiv.className = `status-message status-${type}`;
     statusDiv.style.display = 'block';
-
-    setTimeout(() => {
-        statusDiv.style.display = 'none';
-    }, 3000);
-}
-
-/**
- * Call OpenAI Assistants API
- * @param {string} text - Text to analyze
- * @param {string} assistantId - Assistant ID (asst_...)
- * @param {string} apiKey - API key
- * @returns {Promise<Array>} Key points
- */
-async function callOpenAIAssistant(text, assistantId, apiKey, targetLanguage = 'Traditional Chinese') {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    const baseUrl = isLocalhost ? '/api/openai/v1' : 'https://api.openai.com/v1';
-
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'OpenAI-Beta': 'assistants=v2'
-    };
-
-    try {
-        // 1. Create a Thread
-        const threadResponse = await fetch(`${baseUrl}/threads`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                messages: [{
-                    role: 'user',
-                    content: `Please output in ${targetLanguage}.`
-                }]
-            })
-        });
-
-        if (!threadResponse.ok) {
-            const errorText = await threadResponse.text();
-            throw new Error(`Failed to create thread: ${threadResponse.status} - ${errorText}`);
-        }
-
-        const thread = await threadResponse.json();
-        const threadId = thread.id;
-
-        // 2. Add a Message to the Thread
-        const prompt = text; // Assistants have their own instructions
-
-        const messageResponse = await fetch(`${baseUrl}/threads/${threadId}/messages`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                role: 'user',
-                content: prompt
-            })
-        });
-
-        if (!messageResponse.ok) {
-            const errorText = await messageResponse.text();
-            throw new Error(`Failed to add message: ${messageResponse.status} - ${errorText}`);
-        }
-
-        // 3. Create a Run
-        const runResponse = await fetch(`${baseUrl}/threads/${threadId}/runs`, {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify({
-                assistant_id: assistantId
-            })
-        });
-
-        if (!runResponse.ok) {
-            const errorText = await runResponse.text();
-            throw new Error(`Failed to create run: ${runResponse.status} - ${errorText}`);
-        }
-
-        const run = await runResponse.json();
-        if (!run.id) throw new Error(run.error?.message || 'Failed to create run');
-        const runId = run.id;
-
-        // 4. Poll for completion
-        let status = run.status;
-        let pollCount = 0;
-        const maxPolls = 30; // Timeout after 45 seconds (reduced from 90s)
-
-        console.log(`[Client] Initial run status: ${status}`);
-        console.log(`[Client] Starting polling for run: ${runId}`);
-
-        while (status === 'queued' || status === 'in_progress' || status === 'requires_action') {
-            if (pollCount >= maxPolls) {
-                throw new Error(`Assistant response timeout after ${maxPolls * 1.5} seconds. Status: ${status}`);
-            }
-
-            // Show progress to user
-            if (typeof showStatusMessage === 'function') {
-                showStatusMessage(`AI 分析中... (${pollCount + 1}/${maxPolls})`, 'info');
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            const pollResponse = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`, {
-                method: 'GET',
-                headers: headers
-            });
-
-            if (!pollResponse.ok) {
-                const errorText = await pollResponse.text();
-                throw new Error(`Failed to poll run status: ${pollResponse.status} - ${errorText}`);
-            }
-
-            const poll = await pollResponse.json();
-            status = poll.status;
-            pollCount++;
-
-            console.log(`[Client] Poll #${pollCount}: status = ${status}`);
-
-            if (status === 'failed' || status === 'cancelled' || status === 'expired') {
-                const errorMsg = poll.last_error?.message || 'Unknown error';
-                throw new Error(`Assistant Run ${status}: ${errorMsg}`);
-            }
-
-            // Handle requires_action (e.g., function calls)
-            if (status === 'requires_action') {
-                console.warn('[Client] Run requires action - this is not supported yet');
-                throw new Error('Assistant requires action (function calls) which is not currently supported');
-            }
-        }
-
-        console.log(`[Client] Run completed with status: ${status} after ${pollCount} polls`);
-
-        // 5. Retrieve the Messages
-        const messagesResponse = await fetch(`${baseUrl}/threads/${threadId}/messages`, {
-            method: 'GET',
-            headers: headers
-        });
-
-        if (!messagesResponse.ok) {
-            const errorText = await messagesResponse.text();
-            throw new Error(`Failed to retrieve messages: ${messagesResponse.status} - ${errorText}`);
-        }
-
-        const messagesData = await messagesResponse.json();
-
-        // Find the last assistant message
-        const lastMessage = messagesData.data.find(m => m.role === 'assistant');
-        const generatedText = lastMessage?.content?.[0]?.text?.value || '';
-
-        return parseKeyPoints(generatedText);
-
-    } catch (error) {
-        console.error('OpenAI Assistant Error:', error);
-        throw error;
-    }
+    setTimeout(() => { statusDiv.style.display = 'none'; }, 3000);
 }

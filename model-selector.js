@@ -1,147 +1,193 @@
-// ==========================================
-// Language Model Selection Handler
-// ==========================================
+const ModelSelector = {
+    init() {
+        this.modelProviderSelect = document.getElementById('modelProvider');
+        this.modelAgentSelect = document.getElementById('modelAgent');
+        this.useAgentToggle = document.getElementById('useAgentToggle');
+        this.modelLabel = document.getElementById('modelLabel');
 
-/**
- * Initialize model selector
- */
-function initializeModelSelector() {
-    const modelProvider = document.getElementById('modelProvider');
-    const modelAgent = document.getElementById('modelAgent');
+        if (!this.modelProviderSelect || !this.modelAgentSelect) return;
 
-    if (!modelProvider || !modelAgent) {
-        console.warn('Model selector elements not found');
-        return;
-    }
+        // Restore saved state
+        const savedProvider = localStorage.getItem('selectedModelProvider') || 'gemini';
+        this.modelProviderSelect.value = savedProvider;
 
-    // Set initial agents for Gemini (default) - This will be called by configLoaded or manually if config is already there
-    // updateAgents('gemini'); // Removed as per instruction
+        const savedUseAgent = localStorage.getItem('useAgent') === 'true';
+        if (this.useAgentToggle) {
+            this.useAgentToggle.checked = savedUseAgent;
+        }
 
-    // Listen for provider changes
-    modelProvider.addEventListener('change', (e) => {
-        const provider = e.target.value;
-        updateAgents(provider);
-        console.log(`Model provider changed to: ${provider}`);
-    });
+        this.setupEventListeners();
+        this.updateModelList();
+    },
 
-    // Listen for agent changes
-    modelAgent.addEventListener('change', (e) => {
-        const agent = e.target.value;
-        const provider = modelProvider.value;
-        console.log(`Model agent changed to: ${agent} (${provider})`);
-    });
+    setupEventListeners() {
+        // Provider Change
+        this.modelProviderSelect.addEventListener('change', () => {
+            localStorage.setItem('selectedModelProvider', this.modelProviderSelect.value);
+            this.updateModelList();
+        });
 
-    // Listen for config loaded events to refresh lists
-    window.addEventListener('configLoaded', () => {
-        const provider = modelProvider.value;
-        updateAgents(provider);
-        console.log('🔄 Agent lists refreshed due to config update');
-    });
-}
-
-/**
- * Get Agent Display Name
- * @param {string} name - Agent name from config
- * @param {string} defaultLabel - Fallback if everything is missing
- * @returns {string} Display name
- */
-function formatAgentName(name, defaultLabel) {
-    if (name && name.trim() !== "") {
-        return name;
-    }
-    return "[未命名的Agent]";
-}
-
-/**
- * Update agent dropdown based on selected provider and dynamic config
- * @param {string} provider - The model provider (gemini or openai)
- */
-function updateAgents(provider) {
-    const modelAgent = document.getElementById('modelAgent');
-    if (!modelAgent) return;
-
-    // Clear existing options
-    modelAgent.innerHTML = '';
-
-    const config = window.AUTOSCAN_CONFIG?.[provider];
-    const agents = [];
-
-    // 2. Add custom agents from config
-    if (config) {
-        // Support for multiple agents array
-        if (Array.isArray(config.agents) && config.agents.length > 0) {
-            config.agents.forEach(a => {
-                let id;
-                if (provider === 'gemini') {
-                    id = a.agentKey || a.key || a.id;
-                } else {
-                    id = a.assistantId || a.id || a.key;
-                }
-
-                if (id) {
-                    agents.push({
-                        value: id,
-                        label: formatAgentName(a.name || a.agentName)
-                    });
-                }
+        // Toggle Change
+        if (this.useAgentToggle) {
+            this.useAgentToggle.addEventListener('change', () => {
+                localStorage.setItem('useAgent', this.useAgentToggle.checked);
+                console.log('Agent Mode Toggled:', this.useAgentToggle.checked);
+                this.updateModelList(); // Refresh list on toggle
             });
         }
-        // Support for single agent format
-        else {
-            const id = provider === 'gemini'
-                ? (config.agentKey || config.agentId)
-                : (config.assistantId || config.agentId || config.id);
-            const name = config.agentName || config.name;
+    },
 
-            if (id) {
-                agents.push({
-                    value: id,
-                    label: formatAgentName(name)
+    updateModelList() {
+        const provider = this.modelProviderSelect.value;
+        const useAgent = this.useAgentToggle ? this.useAgentToggle.checked : false;
+
+        this.modelAgentSelect.innerHTML = '';
+        const models = [];
+
+        // Update Label
+        if (this.modelLabel) {
+            this.modelLabel.textContent = useAgent ? 'Agent' : '語言版本';
+        }
+
+        const config = window.AUTOSCAN_CONFIG?.[provider];
+
+        if (useAgent) {
+            // ===========================================
+            // AGENT MODE (Toggle ON)
+            // ===========================================
+            // Show Agents found in config
+            // Note: Currently we filter OUT standard models here if possible, or show "Default Agent"
+            if (config && Array.isArray(config.agents)) {
+                config.agents.forEach(a => {
+                    const name = a.name || a.agentName || '';
+                    let id = (provider === 'gemini') ? (a.agentKey || a.key || a.id) : (a.assistantId || a.id || a.key);
+
+                    if (id) {
+                        models.push({
+                            value: id,
+                            label: this.formatAgentName(name)
+                        });
+                    }
                 });
             }
+            // Should we add a placeholder if empty?
+            if (models.length === 0) {
+                models.push({ value: 'default', label: 'Default Agent' });
+            }
+
+        } else {
+            // ===========================================
+            // STANDARD MODE (Toggle OFF)
+            // ===========================================
+            // Show available Language Versions (Models)
+
+            // 1. Configured Model (Default)
+            if (config && config.model) {
+                models.push({
+                    value: config.model, // e.g. gemini-1.5-flash
+                    label: this.formatModelName(config.model)
+                });
+            }
+
+            // 2. Add other models (hardcoded common ones if not in config explicitly as separate list)
+            // Ideally config.agents usually contained these. We filter for things that look like models or are explicitly set.
+            // For now, let's look at what was in config.agents but filter OUT "AutoScan Agent" legacy stuff.
+            if (config && Array.isArray(config.agents)) {
+                config.agents.forEach(a => {
+                    const name = a.name || a.agentName || '';
+                    if (!name.includes('AutoScan Agent')) {
+                        let id = (provider === 'gemini') ? (a.agentKey || a.key || a.id) : (a.assistantId || a.id || a.key);
+                        if (id) {
+                            models.push({
+                                value: id,
+                                label: this.formatModelName(id) || name
+                            });
+                        }
+                    }
+                });
+            }
+
+            // If Gemini, only keep 2.0 Flash
+            if (provider === 'gemini') {
+                // De-duplicate based on values
+                const existingValues = new Set(models.map(m => m.value));
+
+                // Add 2.0 Flash (Experimental) - Only supported version
+                if (!existingValues.has('gemini-2.0-flash-exp')) {
+                    models.push({ value: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash (Exp)' });
+                }
+            } else if (provider === 'openai') {
+                const existingValues = new Set(models.map(m => m.value));
+                if (!existingValues.has('gpt-4o')) {
+                    models.push({ value: 'gpt-4o', label: 'GPT-4o' });
+                }
+                if (!existingValues.has('gpt-4-turbo')) {
+                    models.push({ value: 'gpt-4-turbo', label: 'GPT-4 Turbo' });
+                }
+            }
         }
-    }
 
-    // 3. Fallback if no agents found (keep basic model support)
-    if (agents.length === 0) {
-        const fallbackId = provider === 'gemini' ? 'gemini-1.5-flash' : 'gpt-4o';
-        agents.push({
-            value: fallbackId,
-            label: `預設 ${provider.toUpperCase()}`
+        // Populate Dropdown
+        models.forEach(m => {
+            const option = document.createElement('option');
+            option.value = m.value;
+            option.text = m.label;
+            this.modelAgentSelect.add(option);
         });
+
+        // Restore selected model if possible
+        const savedKey = useAgent ? `selectedAgent_${provider}` : `selectedModel_${provider}`;
+        const savedVal = localStorage.getItem(savedKey);
+        if (savedVal) {
+            // Check if value exists in current options
+            const exists = Array.from(this.modelAgentSelect.options).some(o => o.value === savedVal);
+            if (exists) this.modelAgentSelect.value = savedVal;
+        }
+
+        // Save selection on change
+        this.modelAgentSelect.onchange = () => {
+            localStorage.setItem(savedKey, this.modelAgentSelect.value);
+        };
+    },
+
+    formatModelName(modelId) {
+        if (!modelId) return 'Unknown';
+        if (modelId.includes('gemini-1.5-pro')) return 'Gemini 1.5 Pro';
+        if (modelId.includes('gemini-1.5-flash')) return 'Gemini 1.5 Flash';
+        if (modelId.includes('gemini-pro')) return 'Gemini Pro';
+        if (modelId.includes('gpt-4o')) return 'GPT-4o';
+        if (modelId.includes('gpt-4')) return 'GPT-4';
+        if (modelId.includes('gpt-3.5')) return 'GPT-3.5';
+        return modelId;
+    },
+
+    formatAgentName(name) {
+        return name.replace('AutoScan', '').trim() || name;
     }
+};
 
-    // Populate options
-    agents.forEach(agent => {
-        const option = document.createElement('option');
-        option.value = agent.value;
-        option.textContent = agent.label;
-        modelAgent.appendChild(option);
-    });
-
-    // Manually trigger change to ensure logic is updated
-    modelAgent.dispatchEvent(new Event('change'));
-
-    console.log(`Updated dynamic agents for ${provider}:`, agents.map(a => a.label));
-}
-
-/**
- * Get currently selected model configuration
- * @returns {Object} Selected model provider and agent
- */
+// Global accessor
 function getSelectedModel() {
-    const modelProvider = document.getElementById('modelProvider');
-    const modelAgent = document.getElementById('modelAgent');
+    const selector = ModelSelector;
+    const provider = selector.modelProviderSelect?.value || 'gemini';
+    const agentSelect = selector.modelAgentSelect;
+    const useAgent = selector.useAgentToggle?.checked || false;
 
     return {
-        provider: modelProvider?.value || 'gemini',
-        agent: modelAgent?.value || 'default',
-        agentLabel: modelAgent?.options[modelAgent.selectedIndex]?.text || '預設 Agent'
+        provider: provider,
+        agent: agentSelect?.value || 'default',
+        agentLabel: agentSelect?.options[agentSelect.selectedIndex]?.text || 'Default',
+        useAgent: useAgent
     };
 }
 
-// Initialize on DOM load
-document.addEventListener('DOMContentLoaded', () => {
-    initializeModelSelector();
-    console.log('✅ Model selector initialized');
-});
+// Initialize when config is ready
+function checkConfigAndInit() {
+    if (window.configManager && window.configManager.loaded) {
+        ModelSelector.init();
+    } else {
+        setTimeout(checkConfigAndInit, 500);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', checkConfigAndInit);

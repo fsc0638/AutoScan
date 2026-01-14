@@ -97,9 +97,18 @@
           </select>
         </div>
 
+        <!-- Agent Toggle -->
+        <div class="selector-group toggle-group">
+          <label for="useAgentToggle">調用 Agent</label>
+          <label class="switch">
+            <input type="checkbox" id="useAgentToggle">
+            <span class="slider round"></span>
+          </label>
+        </div>
+
         <!-- Agent Selection -->
         <div class="selector-group">
-          <label for="modelAgent">Agent</label>
+          <label for="modelAgent" id="modelLabel">Agent</label>
           <select id="modelAgent" class="model-select">
             <!-- Options will be populated by JavaScript based on provider -->
           </select>
