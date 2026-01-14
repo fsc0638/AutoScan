@@ -8,25 +8,22 @@
 window.initCharts = function (data, fullText = '') {
     console.log('[Charts] Initializing charts with data:', data);
 
-    const chartsSection = document.getElementById('chartsSection');
     const container = document.getElementById('chartsContainer');
-
-    if (!chartsSection || !container) return;
+    if (!container) return;
 
     // Clear previous charts
     container.innerHTML = '';
+
+    // Initialize tabs if not already done
+    initResultTabs();
 
     // 1. Core Logic: Structured Data Charts (only if structured data exists)
     const isStructured = data.length > 0 && typeof data[0] === 'object' && data[0].properties;
 
     if (isStructured) {
-        chartsSection.style.display = 'block';
         renderStatusChart(data, container);
-        renderProjectChart(data, container);
+        // renderProjectChart(data, container); // Removed as requested
         renderCategoryChart(data, container);
-    } else {
-        // Even if not structured, we show the section for keywords if text is present
-        chartsSection.style.display = fullText ? 'block' : 'none';
     }
 
     // 2. Keyword Analysis (independent of structured data)
@@ -40,25 +37,61 @@ window.initCharts = function (data, fullText = '') {
 };
 
 /**
- * Basic Keyword Extraction (Client-side)
- * Filters stops words and counts frequencies
+ * Handle Result Tab Switching
+ */
+function initResultTabs() {
+    const tabBtns = document.querySelectorAll('.result-tab-btn');
+    const panels = document.querySelectorAll('.result-panel');
+
+    if (tabBtns.length === 0 || window.resultTabsInitialized) return;
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', function () {
+            const target = this.dataset.resultTab;
+
+            // Update buttons
+            tabBtns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update panels
+            panels.forEach(p => {
+                if (p.id === `${target}Panel`) {
+                    p.classList.add('active');
+                } else {
+                    p.classList.remove('active');
+                }
+            });
+
+            // Re-render word cloud if switching to charts (sometimes canvas size needs refresh)
+            if (target === 'charts') {
+                setTimeout(() => {
+                    const canvas = document.getElementById('wordCloudCanvas');
+                    if (canvas && canvas.width === 0) {
+                        window.dispatchEvent(new Event('resize'));
+                    }
+                }, 100);
+            }
+        });
+    });
+
+    window.resultTabsInitialized = true;
+}
+
+/**
+ * Optimized Keyword Extraction
+ * Ensures keywords with frequency >= 5 are included
  */
 function extractKeywords(text) {
     if (!text) return [];
 
-    // Simple stop words (Traditional Chinese and common English)
     const stopWords = new Set([
         '的', '了', '和', '是', '就', '都', '而', '及', '與', '著', '或', '之', '在', '為', '到', '從', '以', '於', '對於', '關於',
         '你', '我', '他', '她', '它', '我們', '你們', '他們', '這', '那', '哪', '什麼', '誰', '這裏', '那裏',
-        'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'in', 'on', 'at', 'by', 'of', 'for', 'with'
+        'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'in', 'on', 'at', 'by', 'of', 'for', 'with', 'this'
     ]);
 
-    // Tokenize: split by spaces and punctuation
-
-    // 1. Extract English words (min length 3)
+    // Tokenize
     const englishWords = text.match(/[a-zA-Z]{3,}/g) || [];
-
-    // 2. Extract Chinese "words" (simple heuristic: 2-3 chars)
     const chineseChars = text.replace(/[^\u4E00-\u9FA5]/g, '');
     const chineseWords = [];
 
@@ -76,24 +109,32 @@ function extractKeywords(text) {
         }
     });
 
-    const sorted = Object.entries(freqMap)
-        .filter(([token, count]) => {
-            if (/[a-zA-Z]/.test(token)) return count > 1;
-            return count > 2;
-        })
+    // ULTIMATE OPTIMIZATION: Include all keywords with frequency >= 5
+    const results = Object.entries(freqMap)
+        .filter(([token, count]) => count >= 5)
         .sort((a, b) => b[1] - a[1]);
 
-    return sorted.slice(0, 50);
+    // If we have very few words with freq >= 5, fallback to standard filtering
+    if (results.length < 5) {
+        return Object.entries(freqMap)
+            .filter(([token, count]) => {
+                if (/[a-zA-Z]/.test(token)) return count > 1;
+                return count > 2;
+            })
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 50);
+    }
+
+    return results.slice(0, 100);
 }
 
 function renderWordCloud(keywords) {
     const canvas = document.getElementById('wordCloudCanvas');
     if (!canvas || !window.WordCloud) return;
 
-    // WordCloud2 expects data in [word, count] format
-    const list = keywords.slice(0, 30).map(([text, weight]) => [text, weight * 3 + 10]);
+    // Weight scaling for better visual density
+    const list = keywords.map(([text, weight]) => [text, weight * 4 + 10]);
 
-    // Wait for container to be visible
     setTimeout(() => {
         const container = canvas.parentElement;
         canvas.width = container.offsetWidth;
@@ -101,31 +142,32 @@ function renderWordCloud(keywords) {
 
         WordCloud(canvas, {
             list: list,
-            gridSize: 10,
+            gridSize: 8,
             weightFactor: function (size) {
-                return (size * canvas.width) / 800;
+                return (size * canvas.width) / 900;
             },
             fontFamily: 'Inter, sans-serif',
             color: 'random-light',
             backgroundColor: 'transparent',
-            rotateRatio: 0.5,
+            rotateRatio: 0.3,
             rotationSteps: 2,
             minRotation: -Math.PI / 6,
             maxRotation: Math.PI / 6,
-            shuffle: true
+            shuffle: false,
+            clearCanvas: true
         });
-    }, 200);
+    }, 400);
 }
 
 function renderKeywordBarChart(keywords, container) {
     const top10 = keywords.slice(0, 10);
 
-    createChartCanvas(container, 'keywordChart', '頻率最高關鍵字', 'bar', {
+    createChartCanvas(container, 'keywordChart', '重要關鍵字統計', 'bar', {
         labels: top10.map(k => k[0]),
         datasets: [{
             label: '提及次數',
             data: top10.map(k => k[1]),
-            backgroundColor: 'rgba(255, 159, 64, 0.6)',
+            backgroundColor: 'rgba(255, 159, 64, 0.7)',
             borderRadius: 6
         }]
     }, {
@@ -142,43 +184,32 @@ function renderStatusChart(data, container) {
         statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
 
-    createChartCanvas(container, 'statusChart', '狀態分佈', 'pie', {
+    const total = data.length;
+
+    createChartCanvas(container, 'statusChart', '狀態分佈 (百分比)', 'pie', {
         labels: Object.keys(statusCounts),
         datasets: [{
             data: Object.values(statusCounts),
             backgroundColor: [
-                'rgba(255, 99, 132, 0.7)',
-                'rgba(54, 162, 235, 0.7)',
-                'rgba(75, 192, 192, 0.7)',
-                'rgba(255, 206, 86, 0.7)'
+                'rgba(255, 99, 132, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(255, 206, 86, 0.8)'
             ],
-            borderColor: '#fff',
-            borderWidth: 2
-        }]
-    });
-}
-
-function renderProjectChart(data, container) {
-    const projectCounts = {};
-    data.forEach(item => {
-        const projects = item.properties.專案 || [];
-        projects.forEach(p => {
-            projectCounts[p] = (projectCounts[p] || 0) + 1;
-        });
-    });
-
-    if (Object.keys(projectCounts).length === 0) return;
-
-    createChartCanvas(container, 'projectChart', '專案關聯度', 'bar', {
-        labels: Object.keys(projectCounts),
-        datasets: [{
-            label: '提及次數',
-            data: Object.values(projectCounts),
-            backgroundColor: 'rgba(153, 102, 255, 0.6)',
-            borderRadius: 8
+            borderWidth: 0
         }]
     }, {
-        indexAxis: 'y'
+        plugins: {
+            tooltip: {
+                callbacks: {
+                    label: function (context) {
+                        const val = context.raw;
+                        const percent = ((val / total) * 100).toFixed(1);
+                        return `${context.label}: ${val} (${percent}%)`;
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -193,17 +224,18 @@ function renderCategoryChart(data, container) {
 
     if (Object.keys(categoryCounts).length === 0) return;
 
-    createChartCanvas(container, 'categoryChart', '分析領域', 'doughnut', {
+    createChartCanvas(container, 'categoryChart', '分析領域分佈', 'doughnut', {
         labels: Object.keys(categoryCounts),
         datasets: [{
             data: Object.values(categoryCounts),
             backgroundColor: [
-                'rgba(255, 159, 64, 0.7)',
-                'rgba(75, 192, 192, 0.7)',
-                'rgba(54, 162, 235, 0.7)',
-                'rgba(153, 102, 255, 0.7)',
-                'rgba(201, 203, 207, 0.7)'
-            ]
+                'rgba(255, 159, 64, 0.8)',
+                'rgba(75, 192, 192, 0.8)',
+                'rgba(54, 162, 235, 0.8)',
+                'rgba(153, 102, 255, 0.8)',
+                'rgba(201, 203, 207, 0.8)'
+            ],
+            borderWidth: 0
         }]
     });
 }

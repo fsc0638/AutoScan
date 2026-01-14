@@ -125,10 +125,17 @@
       <div class="status-message" id="statusMessage"></div>
     </div>
 
-    <!-- Key Points Section -->
-    <div class="card">
+    <!-- Results Section (Tabs for Key Points & Charts) -->
+    <div class="card result-card">
       <div class="card-header">
-        <h2 class="card-title">重點節錄</h2>
+        <div class="result-tabs">
+          <button class="result-tab-btn active" data-result-tab="keypoints">
+            <span>📝 重點節錄</span>
+          </button>
+          <button class="result-tab-btn" data-result-tab="charts">
+            <span>📊 數據分析</span>
+          </button>
+        </div>
         <div class="button-group">
           <button class="btn btn-notion" id="uploadToNotion" style="display: none;">
             <span>📤 上傳至 Notion</span>
@@ -138,26 +145,27 @@
           </button>
         </div>
       </div>
-      <div id="keyPointsContainer">
-        <div class="empty-state">尚未分析，請先上傳文件或貼上逐字稿</div>
-      </div>
-    </div>
 
-    <!-- Data Visualization Section -->
-    <div class="card" id="chartsSection" style="display: none;">
-      <div class="card-header">
-        <h2 class="card-title">📊 數據分析圖表</h2>
-      </div>
-      <div id="chartsContainer" class="charts-grid">
-        <!-- Charts will be injected here -->
+      <!-- Key Points Panel -->
+      <div class="result-panel active" id="keypointsPanel">
+        <div id="keyPointsContainer">
+          <div class="empty-state">尚未分析，請先上傳文件或貼上逐字稿</div>
+        </div>
       </div>
 
-      <!-- New Keyword specific section -->
-      <div class="keyword-viz-container">
-        <div class="chart-wrapper full-width">
-          <h3>☁️ 關鍵字文字雲</h3>
-          <div class="word-cloud-container">
-            <canvas id="wordCloudCanvas"></canvas>
+      <!-- Charts Panel -->
+      <div class="result-panel" id="chartsPanel">
+        <div id="chartsContainer" class="charts-grid">
+          <!-- Charts will be injected here -->
+        </div>
+
+        <!-- New Keyword specific section -->
+        <div class="keyword-viz-container">
+          <div class="chart-wrapper full-width">
+            <h3>☁️ 關鍵字文字雲</h3>
+            <div class="word-cloud-container">
+              <canvas id="wordCloudCanvas"></canvas>
+            </div>
           </div>
         </div>
       </div>
