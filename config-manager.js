@@ -1,5 +1,9 @@
 // ============================================
 // Configuration Manager
+//
+// LOCKED AREA: CONFIGURATION HANDLING
+// Do not modify the loading or storage mechanism of API keys
+// to maintain consistency with the master branch.
 // ============================================
 
 class ConfigManager {

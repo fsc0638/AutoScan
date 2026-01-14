@@ -1,6 +1,10 @@
 /**
  * AutoScan - Main Application
  * 
+ * LOCKED AREA: CORE UPLOAD & ANALYSIS LOGIC
+ * Do not modify file parsing, AI interface, or core state management
+ * to maintain consistency with the master branch.
+ * 
  * This file handles UI interactions, file parsing, and coordinates 
  * the AI analysis flow using the selected model and configuration.
  */
@@ -212,6 +216,11 @@ async function startAnalysis() {
         renderKeyPoints(keyPoints);
       }
       showStatus('✅ 分析完成！', 'success');
+
+      // Hook: Initialize charts if logic is available
+      if (typeof window.initCharts === 'function') {
+        window.initCharts(keyPoints);
+      }
 
       // Show Notion button if configured
       if (configManager.isConfigured('notion')) {

@@ -1,4 +1,8 @@
 ﻿<!DOCTYPE html>
+<!-- 
+  LOCKED AREA: CORE UPLOAD & ANALYSIS UI
+  Do not modify the input sections or core structure to maintain consistency with the master branch.
+-->
 <html lang="zh-TW">
 
 <head>
@@ -12,6 +16,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <!-- PDF.js for PDF processing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Chart.js for data visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="charts.css">
 </head>
 
 <body>
@@ -133,12 +140,23 @@
         <div class="empty-state">尚未分析，請先上傳文件或貼上逐字稿</div>
       </div>
     </div>
+
+    <!-- Data Visualization Section -->
+    <div class="card" id="chartsSection" style="display: none;">
+      <div class="card-header">
+        <h2 class="card-title">📊 數據分析圖表</h2>
+      </div>
+      <div id="chartsContainer" class="charts-grid">
+        <!-- Charts will be injected here -->
+      </div>
+    </div>
   </div>
 
   <script src="config.js"></script>
   <script src="config-manager.js"></script>
   <script src="model-selector.js"></script>
   <script src="ai-api.js"></script>
+  <script src="charts.js"></script>
   <script src="app.js"></script>
 </body>
 

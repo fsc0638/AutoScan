@@ -1,5 +1,9 @@
 // ==========================================
 // AI Model API Integration
+//
+// LOCKED AREA: AI INTERFACE & PROMPTS
+// Do not modify the prompt structure or API call flow
+// to maintain consistency with the master branch.
 // ==========================================
 
 /**
