@@ -1,0 +1,145 @@
+﻿<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="文件重點分析系統 - 支援 TXT、Word、PDF 文件上傳，使用 AI 智能提取重點並同步至 Notion">
+  <title>文件重點分析系統 | AutoScan</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="fullscreen.css">
+  <!-- JSZip for Word document processing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- PDF.js for PDF processing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <h1 class="title">📄 文件重點分析系統</h1>
+      </div>
+      <p class="subtitle">上傳文件或貼上逐字稿，智能提取重點節錄</p>
+    </header>
+
+    <!-- Input Section -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📥 輸入方式</h2>
+        <div class="language-selector">
+          <label for="languageSelect">分析語言:</label>
+          <select id="languageSelect">
+            <option value="zh-TW">繁體中文</option>
+            <option value="zh-CN">简体中文</option>
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="ja-JP">日本語</option>
+            <option value="ko-KR">한국어</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="tab-navigation">
+        <button class="tab-btn active" data-tab="upload">
+          <span>📁 上傳文件檔案</span>
+        </button>
+        <button class="tab-btn" data-tab="paste">
+          <span>📝 貼上逐字稿文字</span>
+        </button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- Upload Tab -->
+        <div class="tab-panel active" id="uploadTab">
+          <div class="upload-zone" id="uploadZone">
+            <div class="upload-icon">📄</div>
+            <p class="upload-text">點擊或拖放檔案至此處</p>
+            <p class="upload-hint">支援格式：TXT、Word (.docx)、PDF</p>
+            <input type="file" id="fileInput"
+              accept=".txt,text/plain,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf">
+          </div>
+          <div class="file-info" id="fileInfo" style="display: none;">
+            <div class="file-details">
+              <span class="file-icon">📄</span>
+              <div>
+                <h4 id="fileName">檔案名稱</h4>
+                <p id="fileSize">0 KB</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paste Tab -->
+        <div class="tab-panel" id="pasteTab">
+          <div class="text-input-zone">
+            <textarea id="manualTranscript" rows="12" placeholder="請在此貼上您的逐字稿內容...
+
+提示：
+• 可直接從 NoteLM 或其他工具複製貼上
+• 建議保持段落結構以獲得更好的分析效果
+• 最少需要 50 個字元"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Language Model Selection (moved before analyze button) -->
+      <div class="model-selector-container">
+        <!-- Model Provider Selection -->
+        <div class="selector-group">
+          <label for="modelProvider">選擇模型</label>
+          <select id="modelProvider" class="model-select">
+            <option value="gemini">Gemini</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </div>
+
+        <!-- Agent Selection -->
+        <div class="selector-group">
+          <label for="modelAgent">Agent</label>
+          <select id="modelAgent" class="model-select">
+            <!-- Options will be populated by JavaScript based on provider -->
+          </select>
+        </div>
+      </div>
+
+      <!-- Analyze Button -->
+      <div class="analyze-section">
+        <button class="btn" id="analyzeBtn">
+          <span>🔍 分析文字</span>
+        </button>
+      </div>
+
+      <div class="status-message" id="statusMessage"></div>
+    </div>
+
+    <!-- Key Points Section -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">重點節錄</h2>
+        <div class="button-group">
+          <button class="btn btn-notion" id="uploadToNotion" style="display: none;">
+            <span>📤 上傳至 Notion</span>
+          </button>
+          <button class="btn btn-copy" id="copyKeyPoints" style="display: none;">
+            <span>📋 複製重點</span>
+          </button>
+        </div>
+      </div>
+      <div id="keyPointsContainer">
+        <div class="empty-state">尚未分析，請先上傳文件或貼上逐字稿</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="config-manager.js"></script>
+  <script src="model-selector.js"></script>
+  <script src="ai-api.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
