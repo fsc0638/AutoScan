@@ -6,33 +6,87 @@
  */
 
 window.initCharts = function (data, fullText = '') {
-    console.log('[Charts] Initializing charts with data:', data);
+    console.log('[Charts] initCharts called:', { dataLength: data?.length, textLength: fullText?.length });
 
     const container = document.getElementById('chartsContainer');
-    if (!container) return;
+    if (!container) {
+        console.error('[Charts] #chartsContainer not found');
+        return;
+    }
 
     // Clear previous charts
     container.innerHTML = '';
 
     // Initialize tabs if not already done
-    initResultTabs();
-
-    // 1. Core Logic: Structured Data Charts (only if structured data exists)
-    const isStructured = data.length > 0 && typeof data[0] === 'object' && data[0].properties;
-
-    if (isStructured) {
-        renderStatusChart(data, container);
-        // renderProjectChart(data, container); // Removed as requested
-        renderCategoryChart(data, container);
+    try {
+        initResultTabs();
+    } catch (e) {
+        console.warn('[Charts] Result tabs initialization failed:', e);
     }
 
-    // 2. Keyword Analysis (independent of structured data)
-    if (fullText) {
-        const keywords = extractKeywords(fullText);
-        if (keywords.length > 0) {
-            renderKeywordBarChart(keywords, container);
-            renderWordCloud(keywords);
+    // 1. Core Logic: Structured Data Charts
+    // Data check: if data[0] is just a string, it's not structured
+    const isStructured = Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0].properties;
+
+    console.log('[Charts] Data structure check:', { isStructured });
+
+    if (isStructured) {
+        try {
+            renderStatusChart(data, container);
+            renderCategoryChart(data, container);
+        } catch (e) {
+            console.error('[Charts] Error rendering structured charts:', e);
         }
+
+        // Check if AI provided translated keywords
+        const aiKeywords = [];
+        data.forEach(item => {
+            if (item.properties && item.properties.關鍵字 && Array.isArray(item.properties.關鍵字)) {
+                aiKeywords.push(...item.properties.關鍵字);
+            }
+        });
+
+        if (aiKeywords.length > 0) {
+            console.log(`[Charts] Using ${aiKeywords.length} keywords from AI analysis`);
+            // Aggregate weights/frequencies of AI keywords
+            const freqMap = {};
+            aiKeywords.forEach(kw => {
+                // Handle both object {text, weight} and legacy string formats
+                const text = typeof kw === 'object' ? (kw.text || kw.關鍵字) : kw.trim();
+                const weight = typeof kw === 'object' ? (kw.weight || 1) : 1;
+
+                if (text) {
+                    freqMap[text] = (freqMap[text] || 0) + weight;
+                }
+            });
+            const keywordList = Object.entries(freqMap).sort((a, b) => b[1] - a[1]);
+            window.lastKeywords = keywordList;
+            console.log('[Charts] AI Keyword List (weighted):', keywordList);
+            renderKeywordBarChart(keywordList, container);
+            renderWordCloud(keywordList);
+            return; // Skip local extraction since we have AI keywords
+        }
+    } else {
+        console.log('[Charts] Skipping structured charts (data is simple list)');
+    }
+
+    // 2. Keyword Analysis (Fallback to local extraction if no AI keywords)
+    if (fullText) {
+        try {
+            const keywords = extractKeywords(fullText, data);
+            window.lastKeywords = keywords; // Store for tab switching
+            console.log(`[Charts] Extracted ${keywords.length} keywords`);
+            if (keywords.length > 0) {
+                renderKeywordBarChart(keywords, container);
+                renderWordCloud(keywords);
+            } else {
+                console.log('[Charts] No keywords found (below frequency threshold)');
+            }
+        } catch (e) {
+            console.error('[Charts] Error providing keyword analysis:', e);
+        }
+    } else {
+        console.warn('[Charts] No fullText provided for keyword analysis');
     }
 };
 
@@ -65,11 +119,13 @@ function initResultTabs() {
             // Re-render word cloud if switching to charts (sometimes canvas size needs refresh)
             if (target === 'charts') {
                 setTimeout(() => {
-                    const canvas = document.getElementById('wordCloudCanvas');
-                    if (canvas && canvas.width === 0) {
-                        window.dispatchEvent(new Event('resize'));
+                    window.dispatchEvent(new Event('resize'));
+                    // Explicitly re-render WordCloud if we have data
+                    if (window.lastKeywords && window.lastKeywords.length > 0) {
+                        console.log('[Charts] Re-rendering WordCloud on tab switch');
+                        renderWordCloud(window.lastKeywords);
                     }
-                }, 100);
+                }, 150);
             }
         });
     });
@@ -79,83 +135,162 @@ function initResultTabs() {
 
 /**
  * Optimized Keyword Extraction
- * Ensures keywords with frequency >= 5 are included
+ * Uses sentence-aware splitting, expanded stopwords, and linguistic filters.
+ * Now supports structured data as a high-weight keyword source.
  */
-function extractKeywords(text) {
-    if (!text) return [];
+function extractKeywords(text, structuredData = []) {
+    if (!text && (!structuredData || structuredData.length === 0)) return [];
 
     const stopWords = new Set([
+        // Chinese Particles & Functional Words
         '的', '了', '和', '是', '就', '都', '而', '及', '與', '著', '或', '之', '在', '為', '到', '從', '以', '於', '對於', '關於',
-        '你', '我', '他', '她', '它', '我們', '你們', '他們', '這', '那', '哪', '什麼', '誰', '這裏', '那裏',
-        'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'in', 'on', 'at', 'by', 'of', 'for', 'with', 'this'
+        '個', '吧', '嗎', '呢', '啦', '啊', '呀', '嘿', '唔', '嗯', '其', '此', '這', '那', '哪', '誰', '這裏', '那裏', '什麼', '怎樣',
+        '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '個', '隻', '張', '本', '關', '於', '到', '裡', '說', '講',
+        '一個', '一些', '一下', '一次', '一種', '一直', '一些', '一點', '有些', '有些', '雖然', '但是', '如果', '所以', '因為', '甚至',
+        '你', '我', '他', '她', '它', '我們', '你們', '他們', '您的', '我的', '他的', '這是一個',
+        // Common Reporting/Filler Verbs (Fragments)
+        '說', '講', '看', '做', '想', '要', '會', '能', '可以', '可能', '應該', '必須', '需要', '進行', '目前', '現在',
+        // English Stopwords
+        'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'in', 'on', 'at', 'by', 'of', 'for', 'with', 'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their', 'our', 'your', 'my', 'his', 'her', 'us', 'we', 'you', 'me', 'can', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'
     ]);
 
-    // Tokenize
-    const englishWords = text.match(/[a-zA-Z]{3,}/g) || [];
-    const chineseChars = text.replace(/[^\u4E00-\u9FA5]/g, '');
-    const chineseWords = [];
-
-    for (let i = 0; i < chineseChars.length - 1; i++) {
-        chineseWords.push(chineseChars.substr(i, 2));
-        if (i < chineseChars.length - 2) chineseWords.push(chineseChars.substr(i, 3));
-    }
-
-    const allTokens = [...englishWords.map(w => w.toLowerCase()), ...chineseWords];
     const freqMap = {};
 
-    allTokens.forEach(token => {
-        if (!stopWords.has(token)) {
-            freqMap[token] = (freqMap[token] || 0) + 1;
+    // 1. Process Structured Data (High Weight: x5)
+    if (Array.isArray(structuredData)) {
+        structuredData.forEach(item => {
+            const title = item.properties?.ToDo || '';
+            const tokens = title.match(/[\u4E00-\u9FA5]{2,4}|[a-zA-Z]{3,}/g) || [];
+            tokens.forEach(token => {
+                const t = token.toLowerCase();
+                if (!stopWords.has(t)) {
+                    freqMap[t] = (freqMap[t] || 0) + 5;
+                }
+            });
+        });
+    }
+
+    // 2. Process Raw Text (Sentence-Aware)
+    if (text) {
+        // Split by punctuation to avoid cross-sentence fragments (like "容說")
+        const sentences = text.split(/[,.!?;:，。！？；：\n\s\t]/);
+
+        sentences.forEach(sentence => {
+            if (!sentence || sentence.length < 2) return;
+
+            // Extract English words
+            const englishWords = sentence.match(/[a-zA-Z]{3,}/g) || [];
+            englishWords.forEach(w => {
+                const t = w.toLowerCase();
+                if (!stopWords.has(t)) {
+                    freqMap[t] = (freqMap[t] || 0) + 1;
+                }
+            });
+
+            // Extract Chinese n-grams (2-3 chars)
+            const chars = sentence.replace(/[^\u4E00-\u9FA5]/g, '');
+            for (let i = 0; i < chars.length - 1; i++) {
+                // Bi-grams
+                const bi = chars.substr(i, 2);
+                if (!stopWords.has(bi) && !stopWords.has(bi[0]) && !stopWords.has(bi[1])) {
+                    // Linguistic heuristic: avoid ending with "說" or "個"
+                    if (!['說', '講', '個', '內'].includes(bi[1])) {
+                        freqMap[bi] = (freqMap[bi] || 0) + 1;
+                    }
+                }
+
+                // Tri-grams
+                if (i < chars.length - 2) {
+                    const tri = chars.substr(i, 3);
+                    if (!stopWords.has(tri) && !stopWords.has(tri[0]) && !stopWords.has(tri[tri.length - 1])) {
+                        freqMap[tri] = (freqMap[tri] || 0) + 1;
+                    }
+                }
+            }
+        });
+    }
+
+    // Sort and limit
+    const results = Object.entries(freqMap)
+        .sort((a, b) => b[1] - a[1]);
+
+    // Cleanup redundancy: if a shorter word is a substring of a more frequent longer word, ignore it
+    const finalResults = [];
+    results.forEach(([word, freq], idx) => {
+        if (finalResults.length >= 80) return;
+
+        // Find if any higher-freq word contains this word
+        const isFragment = finalResults.some(([hWord, hFreq]) => hWord.includes(word) && hFreq >= freq);
+        if (!isFragment) {
+            finalResults.push([word, freq]);
         }
     });
 
-    // ULTIMATE OPTIMIZATION: Include all keywords with frequency >= 5
-    const results = Object.entries(freqMap)
-        .filter(([token, count]) => count >= 5)
-        .sort((a, b) => b[1] - a[1]);
-
-    // If we have very few words with freq >= 5, fallback to standard filtering
-    if (results.length < 5) {
-        return Object.entries(freqMap)
-            .filter(([token, count]) => {
-                if (/[a-zA-Z]/.test(token)) return count > 1;
-                return count > 2;
-            })
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 50);
-    }
-
-    return results.slice(0, 100);
+    return finalResults.slice(0, 60);
 }
 
 function renderWordCloud(keywords) {
     const canvas = document.getElementById('wordCloudCanvas');
-    if (!canvas || !window.WordCloud) return;
+    if (!canvas) {
+        console.error('[Charts] #wordCloudCanvas not found');
+        return;
+    }
+    if (!window.WordCloud) {
+        console.error('[Charts] WordCloud2.js library not loaded');
+        return;
+    }
 
-    // Weight scaling for better visual density
-    const list = keywords.map(([text, weight]) => [text, weight * 4 + 10]);
+    // Relative scaling for AI keywords (often have low absolute counts like 1, 2, 3)
+    // Find min/max weights
+    const weights = keywords.map(kw => kw[1]);
+    const maxW = Math.max(...weights);
+    const minW = Math.min(...weights);
 
+    // Map weights to a visible range (e.g., 20px to 80px)
+    const list = keywords.map(([text, weight]) => {
+        let size;
+        if (maxW === minW) {
+            size = 40; // Default size if all are same
+        } else {
+            // Linear interpolation: size = minSize + (weight - minW) / (maxW - minW) * (maxSize - minSize)
+            size = 20 + ((weight - minW) / (maxW - minW)) * 60;
+        }
+        return [text, size];
+    });
+
+    // Use a short delay to ensure tab-panel is active or has dimensions
     setTimeout(() => {
         const container = canvas.parentElement;
-        canvas.width = container.offsetWidth;
-        canvas.height = container.offsetHeight;
+        if (!container) return;
 
-        WordCloud(canvas, {
-            list: list,
-            gridSize: 8,
-            weightFactor: function (size) {
-                return (size * canvas.width) / 900;
-            },
-            fontFamily: 'Inter, sans-serif',
-            color: 'random-light',
-            backgroundColor: 'transparent',
-            rotateRatio: 0.3,
-            rotationSteps: 2,
-            minRotation: -Math.PI / 6,
-            maxRotation: Math.PI / 6,
-            shuffle: false,
-            clearCanvas: true
-        });
+        // Ensure container has default dimensions if it's hidden
+        const width = container.offsetWidth || 800;
+        const height = container.offsetHeight || 350;
+
+        canvas.width = width;
+        canvas.height = height;
+
+        console.log(`[Charts] Rendering WordCloud on ${width}x${height} canvas`);
+
+        try {
+            WordCloud(canvas, {
+                list: list,
+                gridSize: 8,
+                weightFactor: function (size) {
+                    return (size * canvas.width) / 900;
+                },
+                fontFamily: 'Inter, sans-serif',
+                color: 'random-light',
+                backgroundColor: 'transparent',
+                rotateRatio: 0, // Force horizontal only
+                minRotation: 0,
+                maxRotation: 0,
+                shuffle: false,
+                clearCanvas: true
+            });
+        } catch (e) {
+            console.error('[Charts] WordCloud rendering error:', e);
+        }
     }, 400);
 }
 
@@ -171,6 +306,16 @@ function renderKeywordBarChart(keywords, container) {
             borderRadius: 6
         }]
     }, {
+        scales: {
+            x: {
+                ticks: { color: '#ffffff' },
+                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            },
+            y: {
+                ticks: { color: '#ffffff' },
+                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+            }
+        },
         plugins: {
             legend: { display: false }
         }
@@ -186,7 +331,7 @@ function renderStatusChart(data, container) {
 
     const total = data.length;
 
-    createChartCanvas(container, 'statusChart', '狀態分佈 (百分比)', 'pie', {
+    createChartCanvas(container, 'statusChart', '狀態分佈', 'pie', {
         labels: Object.keys(statusCounts),
         datasets: [{
             data: Object.values(statusCounts),
@@ -200,6 +345,25 @@ function renderStatusChart(data, container) {
         }]
     }, {
         plugins: {
+            legend: {
+                labels: { color: '#ffffff' }
+            },
+            datalabels: {
+                color: '#ffffff',
+                formatter: (value, ctx) => {
+                    let sum = 0;
+                    let dataArr = ctx.chart.data.datasets[0].data;
+                    dataArr.map(data => {
+                        sum += data;
+                    });
+                    let percentage = (value * 100 / sum).toFixed(1) + "%";
+                    return percentage;
+                },
+                font: {
+                    weight: 'bold',
+                    size: 14
+                }
+            },
             tooltip: {
                 callbacks: {
                     label: function (context) {
@@ -210,7 +374,7 @@ function renderStatusChart(data, container) {
                 }
             }
         }
-    });
+    }, [ChartDataLabels]); // Pass plugin explicitly
 }
 
 function renderCategoryChart(data, container) {
@@ -222,25 +386,52 @@ function renderCategoryChart(data, container) {
         });
     });
 
-    if (Object.keys(categoryCounts).length === 0) return;
+    const categoryLabels = Object.keys(categoryCounts);
+    if (categoryLabels.length === 0) return;
+
+    // Generate unique colors for each category
+    const colors = generateUniquePalette(categoryLabels.length);
 
     createChartCanvas(container, 'categoryChart', '分析領域分佈', 'doughnut', {
-        labels: Object.keys(categoryCounts),
+        labels: categoryLabels,
         datasets: [{
             data: Object.values(categoryCounts),
-            backgroundColor: [
-                'rgba(255, 159, 64, 0.8)',
-                'rgba(75, 192, 192, 0.8)',
-                'rgba(54, 162, 235, 0.8)',
-                'rgba(153, 102, 255, 0.8)',
-                'rgba(201, 203, 207, 0.8)'
-            ],
+            backgroundColor: colors,
             borderWidth: 0
         }]
+    }, {
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: '#ffffff',
+                    font: { size: 12 },
+                    padding: 15
+                }
+            }
+        }
     });
 }
 
-function createChartCanvas(container, id, title, type, chartData, options = {}) {
+/**
+ * Generates a palette of unique HSL colors
+ */
+function generateUniquePalette(count) {
+    const colors = [];
+    const hueStep = 360 / Math.max(count, 1);
+
+    for (let i = 0; i < count; i++) {
+        const hue = (i * hueStep) % 360;
+        // Vary saturation and lightness slightly to avoid looking too uniform
+        // but keep them high enough for visibility in dark mode
+        const saturation = 70 + (i % 2) * 10; // 70% or 80%
+        const lightness = 60 + (i % 3) * 5;   // 60%, 65%, 70%
+        colors.push(`hsla(${hue}, ${saturation}%, ${lightness}%, 0.8)`);
+    }
+    return colors;
+}
+
+function createChartCanvas(container, id, title, type, chartData, options = {}, plugins = []) {
     const wrapper = document.createElement('div');
     wrapper.className = 'chart-wrapper';
 
@@ -261,13 +452,14 @@ function createChartCanvas(container, id, title, type, chartData, options = {}) 
     new Chart(canvas, {
         type: type,
         data: chartData,
+        plugins: plugins, // Support for ChartDataLabels
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#e0e0e0', font: { size: 10 } }
+                    labels: { color: '#ffffff', font: { size: 10 } }
                 }
             },
             ...options

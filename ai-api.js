@@ -146,8 +146,9 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
 # Constraints (核心約束)
 1. **禁止堆疊**：嚴禁將所有資訊塞入 ToDo 欄位。ToDo 欄位僅能保留「具體動作的短句」。
 2. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-3. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
-4. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
+3.- **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
+4. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
+5. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
 
 # Field Mapping Logic (欄位對齊邏輯)
 - **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約）。
@@ -157,6 +158,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
 - **負責人 (Person)**: 提取提到的個人或實體（例：凱衛）。
 - **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。
 - **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
+- **關鍵字 (Array of Objects)**: 提取 3-5 個「翻譯後」的核心關鍵字，並賦予 1-10 的權重（10 為最核心）。格式：[{"text": "關鍵字", "weight": 5}]。
 
 # JSON Output Structure
 [
@@ -169,7 +171,8 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
       "狀態": "未開始" | "進行中" | "完成",
       "負責人": "String",
       "到期日": "YYYY-MM-DD",
-      "建立時間": "YYYY-MM-DD HH:mm:ss"
+      "建立時間": "YYYY-MM-DD HH:mm:ss",
+      "關鍵字": [{"text": "String", "weight": Number}]
     }
   }
 ]`;
