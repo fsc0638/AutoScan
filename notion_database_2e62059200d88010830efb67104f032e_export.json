@@ -1,0 +1,67 @@
+{
+  "exported_at": "2026-01-12T06:23:20.399260+00:00",
+  "source": {
+    "system": "Notion",
+    "database_id": "2e62059200d88010830efb67104f032e",
+    "database_title": "To Do",
+    "database_url": "https://www.notion.so/2e62059200d88010830efb67104f032e",
+    "data_source_url": "collection://2e620592-00d8-8053-8a53-000b644e1691"
+  },
+  "schema": {
+    "ToDo": {
+      "type": "title",
+      "description": ""
+    },
+    "到期日": {
+      "type": "date",
+      "description": "",
+      "expanded_fields": [
+        "date:到期日:start",
+        "date:到期日:end",
+        "date:到期日:is_datetime"
+      ]
+    },
+    "專案": {
+      "type": "multi_select",
+      "description": "",
+      "options": []
+    },
+    "歸屬分類": {
+      "type": "multi_select",
+      "description": "",
+      "options": []
+    },
+    "狀態": {
+      "type": "status",
+      "description": "",
+      "options": [
+        "未開始",
+        "進行中",
+        "完成"
+      ]
+    },
+    "負責人": {
+      "type": "person",
+      "description": "",
+      "value_format": "array_of_user_ids"
+    },
+    "建立時間": {
+      "type": "created_time",
+      "description": ""
+    }
+  },
+  "rows": [
+    {
+      "page_url": "https://www.notion.so/2e62059200d8810ebec4e91ab7ccc103",
+      "properties": {
+        "ToDo": "AutoScan 重點節錄 - 2026/1/12 下午2:06:54",
+        "到期日": null,
+        "專案": [],
+        "歸屬分類": [],
+        "狀態": "未開始",
+        "負責人": [],
+        "建立時間": "2026-01-12T06:06:49.296Z"
+      }
+    }
+  ]
+}

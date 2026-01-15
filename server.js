@@ -394,14 +394,17 @@ if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
 /**
  * Vertex AI Agent Query Endpoint
  * POST /api/vertex-agent/query
+ * 
+ * Updated to use Vertex AI Gemini API directly for structured output
+ * This approach works without requiring Discovery Engine / DataStore setup
  */
 app.post('/api/vertex-agent/query', async (req, res) => {
     console.log('[Server] Vertex Agent query received');
 
-    const { query, projectId, location, engineId, dataStoreId } = req.body;
+    const { query, projectId, location } = req.body;
 
-    if (!query || !projectId || !engineId) {
-        return res.status(400).json({ message: 'Missing required fields: query, projectId, engineId' });
+    if (!query) {
+        return res.status(400).json({ message: 'Missing required field: query' });
     }
 
     if (!vertexAuth) {
@@ -413,12 +416,59 @@ app.post('/api/vertex-agent/query', async (req, res) => {
         const client = await vertexAuth.getClient();
         const accessToken = await client.getAccessToken();
 
-        // Vertex AI Agent Builder - Conversational Search API
-        // Reference: https://cloud.google.com/generative-ai-app-builder/docs/reference/rest/v1beta/projects.locations.dataStores.conversations/converse
-        // Using dataStores endpoint instead of engines
-        const apiUrl = `https://discoveryengine.googleapis.com/v1beta/projects/${projectId}/locations/${location}/collections/default_collection/dataStores/${dataStoreId}/conversations/-:converse`;
+        // Use the Service Account's project ID
+        const serviceAccountKey = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
+        const actualProjectId = serviceAccountKey.project_id;
+        const actualLocation = location || 'us-central1';
 
-        console.log('[Server] Calling Vertex Agent API:', apiUrl);
+        // Vertex AI Gemini API - Use Gemini 2.0 Flash for structured output
+        const model = 'gemini-2.0-flash-exp';
+        const apiUrl = `https://${actualLocation}-aiplatform.googleapis.com/v1beta1/projects/${actualProjectId}/locations/${actualLocation}/publishers/google/models/${model}:generateContent`;
+
+        console.log('[Server] Calling Vertex AI Gemini API:', actualProjectId, model);
+
+        // System Instruction - Same as in ai-api.js but for Vertex AI
+        const systemInstruction = `# Role
+你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容」拆解為**多個**獨立的行動項目，每個項目對應一筆 Notion 資料庫記錄。
+
+# 核心任務
+**從會議逐字稿中提取所有可識別的行動項目、待辦事項、決議事項**。一份會議記錄通常會有 5-20 個不等的行動項目，請務必全部提取，不要遺漏。
+
+# Constraints (核心約束)
+1. **多筆輸出**：一份會議記錄應輸出多個 JSON 物件，每個物件代表一個獨立的行動項目。
+2. **禁止堆疊**：嚴禁將所有資訊塞入單一 ToDo 欄位。每個行動項目都應該是獨立的物件。
+3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
+4. **語言翻譯（極度重要）**：
+   - **100% 完整翻譯**：所有輸出內容必須完全翻譯成「繁體中文」，不得保留任何原語言文字
+   - **專有名詞處理**：公司名稱、人名、地名等專有名詞也必須翻譯或音譯
+5. **輸出格式**：嚴格遵守 JSON 格式。僅輸出純 JSON 陣列，不要包含 Markdown 標籤或開場白。
+
+# Field Mapping Logic (欄位對齊邏輯)
+- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、法說會、研討會）。
+- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Goonas合作案、12/18簽約儀式）。
+- **ToDo (String)**: 提取「重點大意」，字數不需過於精簡，約50字以下。
+- **狀態 (Status)**: 根據內容判定，預設為 "未開始"
+- **負責人 (Person)**: 提取語意中提到的單位、個人、實體、公司部門。
+- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。
+- **建立時間 (DateTime)**: 使用 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
+
+# JSON Output Structure (輸出多個物件)
+[
+  {
+    "operation": "CREATE",
+    "properties": {
+      "歸屬分類": ["商務簽約"],
+      "專案": ["Goonas合作案"],
+      "ToDo": "與日本公司簽約",
+      "狀態": "未開始",
+      "負責人": "凱衛",
+      "到期日": "2026-12-18",
+      "建立時間": "2026-01-14 11:00:00"
+    }
+  }
+]
+
+**重要提醒**：請確保輸出陣列包含所有從會議中識別到的行動項目。`;
 
         const response = await fetch(apiUrl, {
             method: 'POST',
@@ -427,35 +477,36 @@ app.post('/api/vertex-agent/query', async (req, res) => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                query: {
-                    input: query
+                contents: [{
+                    role: 'user',
+                    parts: [{ text: query }]
+                }],
+                systemInstruction: {
+                    parts: [{ text: systemInstruction }]
                 },
-                // Request structured output if possible
-                summarySpec: {
-                    summaryResultCount: 5,
-                    includeCitations: false
-                },
-                // Use the agent's grounding capability
-                safeSearch: false
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 8192
+                }
             })
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            console.error('[Server] Vertex Agent API Error:', JSON.stringify(data, null, 2));
+            console.error('[Server] Vertex AI API Error:', JSON.stringify(data, null, 2));
             return res.status(response.status).json(data);
         }
 
-        console.log('[Server] Vertex Agent API Success');
-        console.log('[Server] Response:', JSON.stringify(data, null, 2));
+        console.log('[Server] Vertex AI Gemini API Success');
 
-        // Extract reply from conversational response
-        const reply = data.reply?.reply || data.reply?.summary?.summaryText || data.reply || '';
+        // Extract text from Gemini response
+        const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        
+        console.log('[Server] Generated text preview:', generatedText.substring(0, 200));
 
         res.json({
-            answer: reply,
-            conversationId: data.conversation?.name,
+            answer: generatedText,
             raw: data
         });
 

@@ -1,0 +1,642 @@
+﻿// ==========================================
+// AI Model API Integration
+// ==========================================
+
+/**
+ * Call AI model to analyze text and extract key points
+ * @param {string} text - Text to analyze
+ * @returns {Promise<Array>} Array of key points
+ */
+/**
+ * Call AI model to analyze text and extract key points
+ * @param {string} text - Text to analyze
+ * @param {string} targetLanguage - Target output language
+ * @returns {Promise<Array>} Array of key points
+ */
+async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
+    const model = getSelectedModel();
+    const providerConfig = await getModelConfig(model.provider);
+
+    // Determine the API Key: Priority: Agent's specific key > Provider's global key
+    let apiKey = providerConfig?.apiKey;
+
+    // If a specific agent is selected, look for its dedicated API Key in the config
+    if (model.agent !== 'default') {
+        const agents = providerConfig?.agents || [];
+        // Support both array and object formats
+        const agentList = Array.isArray(agents) ? agents : (agents[model.agent] ? [agents[model.agent]] : []);
+        const selectedAgentConfig = agentList.find(a => (a.agentKey === model.agent || a.assistantId === model.agent || a.key === model.agent || a.id === model.agent));
+
+        if (selectedAgentConfig && selectedAgentConfig.apiKey) {
+            apiKey = selectedAgentConfig.apiKey;
+            console.log(`Using dedicated API Key for agent: ${model.agentLabel}`);
+        }
+    }
+
+    if (!apiKey) {
+        throw new Error(`?芾身摰?${model.provider} API ?`);
+    }
+
+    console.log(`Using ${model.agentLabel} (${model.agent}) for analysis...`);
+
+    const defaultVersions = {
+        gemini: 'gemini-2.0-flash-exp',
+        openai: 'gpt-4o'
+    };
+
+    const modelVersion = defaultVersions[model.provider];
+
+    try {
+        if (model.provider === 'gemini') {
+            const targetModel = model.agent !== 'default' ? model.agent : modelVersion;
+            // Pass agentLabel to determine if we should use structured output
+            return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
+        } else if (model.provider === 'openai') {
+            if (model.agent !== 'default') {
+                // Use Assistants API for configured agents
+                const agentConfig = providerConfig.agents[model.agent];
+                return await callOpenAIAssistant(text, agentConfig.assistantId, apiKey, targetLanguage);
+            } else {
+                // Use Chat Completion API
+                return await callOpenAIAPI(text, modelVersion, apiKey, targetLanguage);
+            }
+        } else {
+            throw new Error('銝?渡?隤?璅∪?');
+        }
+    } catch (error) {
+        console.error('AI Model API Error:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get model configuration from configManager
+ * @param {string} provider - Model provider (gemini or openai)
+ * @returns {Promise<Object>} Configuration object
+ */
+async function getModelConfig(provider) {
+    // Wait for configManager to load if not ready
+    if (!window.configManager || !window.configManager.loaded) {
+        console.log('Waiting for configuration to load...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    if (!window.configManager || !window.configManager.loaded) {
+        throw new Error('?蔭?芾??伐?隢?圈???);
+    }
+
+    if (provider === 'gemini') {
+        return configManager.getGeminiConfig();
+    } else if (provider === 'openai') {
+        return configManager.getOpenAIConfig();
+    }
+
+    return null;
+}
+
+/**
+ * Call Gemini API
+ * @param {string} text - Text to analyze
+ * @param {string} modelId - Gemini model ID
+ * @param {string} apiKey - API key
+ * @param {string} agentLabel - Agent label to determine behavior
+ * @returns {Promise<Array>} Key points or structured data
+ */
+/**
+ * Call Gemini API
+ * @param {string} text - Text to analyze
+ * @param {string} modelId - Gemini model ID
+ * @param {string} apiKey - API key
+ * @param {string} agentLabel - Agent label to determine behavior
+ * @param {string} targetLanguage - Target language for output
+ * @returns {Promise<Array>} Key points or structured data
+ */
+async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLanguage = 'Traditional Chinese') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // Forced to v1beta to ensure compatibility with both standard and tuned models
+    const apiVersion = 'v1beta';
+
+    // Improved path handling: if it already looks like a model path, keep it; otherwise prepend 'models/'
+    const modelPath = (modelId.startsWith('models/') || modelId.startsWith('tunedModels/'))
+        ? modelId
+        : `models/${modelId}`;
+
+    const baseUrl = isLocalhost
+        ? `/api/gemini/${apiVersion}/${modelPath}:generateContent`
+        : `https://generativelanguage.googleapis.com/${apiVersion}/${modelPath}:generateContent`;
+
+    const url = `${baseUrl}?key=${apiKey}`;
+
+    // Determine if we should use structured output based on agent name
+    const useStructuredOutput = agentLabel.includes('AutoScan');
+
+    let systemInstruction = null;
+    let userPrompt = text;
+
+    if (useStructuredOutput) {
+        // System Instructions for Notion data structuring (only for AutoScan Agent)
+        systemInstruction = `# Role
+雿銝雿??鞎痊 Notion ?豢?蝯???撠振???遙?撠?霅啣摰嫘?閫?憭蝡雁摨衣?撅祆改?隞亙???Notion ???澈甈???
+# Constraints (?詨?蝝?)
+1. **蝳迫??**嚗蝳????閮???ToDo 甈??oDo 甈??靽??擃?雿??剖??2. **鞈??圾**嚗??鞈???獢???鞎砌犖????交??撠?甈???3. **蝧餉陌??擃?**嚗??撓?箏?? [${targetLanguage}]??4. **頛詨?澆?**嚗?頛詨蝝?JSON ???嚗?? Markdown 隞?Ⅳ憛?蝐扎?
+# Field Mapping Logic (甈?撠??摩)
+- **甇詨惇?? (Array)**: ?寞?隤??斗??嚗?嚗??拍隢絲憭??氬??偷蝝???- **撠? (Array)**: ???琿???獢?蝔梧?靘??唳?Ｘ平鈭斗?瘣餃?嚗?- **ToDo (String)**: ???敹???摮?蝎曄陛嚗?嚗??交?踹?蝪賜?嚗?- **???(Status)**: ?寞??批捆?文?嚗?閮剔 "?芷?憪???- **鞎痊鈭?(Person)**: ????犖?祕擃?靘??梯?嚗?- **?唳???(Date)**: ???交??澆? YYYY-MM-DD??????隢??僑隞質撓??YYYY-04-01??- **撱箇??? (DateTime)**: 雿輻?嗅??? ${new Date().toISOString().slice(0, 19).replace('T', ' ')}??
+# JSON Output Structure
+[
+  {
+    "operation": "CREATE",
+    "properties": {
+      "甇詨惇??": ["String"],
+      "撠?": ["String"],
+      "ToDo": "String (蝪∠銵?)",
+      "???: "?芷?憪? | "?脰?銝? | "摰?",
+      "鞎痊鈭?: "String",
+      "?唳???: "YYYY-MM-DD",
+      "撱箇???": "YYYY-MM-DD HH:mm:ss"
+    }
+  }
+]`;
+        console.log('[Gemini API] Using structured output mode for AutoScan Agent');
+    } else {
+        console.log('[Gemini API] Using simple prompt mode');
+        userPrompt = `Please analyze the following text and provide key points. Ensure the output is in ${targetLanguage}.\n\n${text}`;
+    }
+
+    // Build request body
+    const requestBody = {
+        contents: [{
+            parts: [{
+                text: text
+            }]
+        }]
+    };
+
+    // Add system instruction only if using structured output
+    if (systemInstruction) {
+        requestBody.system_instruction = {
+            parts: [{
+                text: systemInstruction
+            }]
+        };
+    }
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`Gemini API Error: ${error.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Parse based on output mode
+    if (useStructuredOutput) {
+        return parseStructuredOutput(generatedText);
+    } else {
+        return parseKeyPoints(generatedText);
+    }
+}
+
+/**
+ * Call OpenAI API
+ * @param {string} text - Text to analyze
+ * @param {string} modelVersion - OpenAI model version
+ * @param {string} apiKey - API key
+ * @returns {Promise<Array>} Key points
+ */
+/**
+ * Call OpenAI API
+ * @param {string} text - Text to analyze
+ * @param {string} modelVersion - OpenAI model version
+ * @param {string} apiKey - API key
+ * @param {string} targetLanguage - Target output language
+ * @returns {Promise<Array>} Key points
+ */
+async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Traditional Chinese') {
+    const prompt = `Analyze and extract key points. Output language: ${targetLanguage}.\n\n${text}`;
+
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const url = isLocalhost ? '/api/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: modelVersion,
+            messages: [{
+                role: 'user',
+                content: prompt
+            }],
+            temperature: 0.7,
+            max_tokens: 2048
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(`OpenAI API Error: ${error.error?.message || response.statusText}`);
+    }
+
+    const data = await response.json();
+    const generatedText = data.choices[0].message.content;
+
+    return parseKeyPoints(generatedText);
+}
+
+/**
+ * Parse structured JSON output from Gemini for Notion
+ * @param {string} text - Generated text with JSON structure
+ * @returns {Array} Array of structured objects or fallback to simple key points
+ */
+function parseStructuredOutput(text) {
+    try {
+        // Remove markdown code block tags if present
+        let cleanedText = text.trim();
+        if (cleanedText.startsWith('```json')) {
+            cleanedText = cleanedText.replace(/^```json\n/, '').replace(/\n```$/, '');
+        } else if (cleanedText.startsWith('```')) {
+            cleanedText = cleanedText.replace(/^```\n/, '').replace(/\n```$/, '');
+        }
+
+        // Try to parse as JSON
+        const jsonData = JSON.parse(cleanedText);
+
+        // Validate it's an array
+        if (Array.isArray(jsonData) && jsonData.length > 0) {
+            console.log('[AI API] Parsed structured JSON output:', jsonData);
+            return jsonData;
+        }
+
+        // If not valid array, fall back to simple parsing
+        console.warn('[AI API] JSON is not an array, falling back to simple parsing');
+        return parseKeyPoints(text);
+
+    } catch (error) {
+        // If JSON parsing fails, fall back to simple key points parsing
+        console.warn('[AI API] Failed to parse as JSON, falling back to simple parsing:', error.message);
+        return parseKeyPoints(text);
+    }
+}
+
+/**
+ * Parse key points from AI generated text
+ * @param {string} text - Generated text with key points
+ * @returns {Array} Array of key point strings
+ */
+function parseKeyPoints(text) {
+    // Split by newlines and filter empty lines
+    const lines = text
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0);
+
+    // Remove bullet points, numbers, and other markers
+    const keyPoints = lines.map(line => {
+        return line
+            .replace(/^[-*?兡\s*/, '')  // Remove bullet points
+            .replace(/^\d+[\.)]\s*/, '') // Remove numbers
+            .replace(/^[銝鈭????凋??思??+[??]\s*/, '') // Remove Chinese numbers
+            .trim();
+    }).filter(point => point.length > 0);
+
+    return keyPoints;
+}
+
+/**
+ * Get language name from language code
+ * @param {string} langCode - Language code
+ * @returns {string} Language name
+ */
+function getLanguageName(langCode) {
+    const langMap = {
+        'zh-TW': '蝜?銝剜?',
+        'zh-CN': '蝞雿葉??,
+        'en-US': 'English',
+        'en-GB': 'English',
+        'ja-JP': '?交隤?,
+        'ko-KR': '?筏??
+    };
+    return langMap[langCode] || '蝜?銝剜?';
+}
+
+/**
+ * Display key points in UI - supports both simple array and structured JSON
+ * Now renders editable inputs instead of static text
+ * @param {Array} keyPoints - Array of key point strings or structured objects
+ */
+function displayKeyPoints(keyPoints) {
+    const container = document.getElementById('keyPointsContainer');
+    if (!container) return;
+
+    if (!keyPoints || keyPoints.length === 0) {
+        container.innerHTML = '<div class="empty-state">?芾????</div>';
+        return;
+    }
+
+    currentKeyPoints = keyPoints;
+
+    // Determine if we have structured data or simple strings
+    const isStructured = keyPoints.length > 0 && typeof keyPoints[0] === 'object' && keyPoints[0].properties;
+
+    let html;
+    if (isStructured) {
+        // Display structured data with multiple editable fields
+        html = `
+    <div class="key-points-list">
+      ${keyPoints.map((item, index) => {
+            const props = item.properties;
+            return `
+        <div class="key-point-item structured" data-index="${index}">
+          <div class="key-point-number">${index + 1}</div>
+          <div class="key-point-content">
+            <!-- ToDo / Title -->
+            <div class="field-group full-width">
+                <input type="text" class="edit-field title" value="${escapeHtmlAttribute(props.ToDo || '')}" placeholder="敺齒鈭?璅?" data-field="ToDo">
+            </div>
+            
+            <div class="meta-row">
+                <!-- 甇詨惇?? -->
+                <div class="field-group">
+                    <span class="field-icon">?儭?/span>
+                    <input type="text" class="edit-field tag" value="${escapeHtmlAttribute((props.甇詨惇?? || []).join(', '))}" placeholder="?? (????)" data-field="甇詨惇??">
+                </div>
+
+                <!-- 撠? -->
+                <div class="field-group">
+                    <span class="field-icon">??</span>
+                    <input type="text" class="edit-field project" value="${escapeHtmlAttribute((props.撠? || []).join(', '))}" placeholder="撠?" data-field="撠?">
+                </div>
+            </div>
+
+            <div class="meta-row">
+                <!-- 鞎痊鈭?-->
+                <div class="field-group">
+                    <span class="field-icon">?</span>
+                    <input type="text" class="edit-field person" value="${escapeHtmlAttribute(props.鞎痊鈭?|| '')}" placeholder="鞎痊鈭? data-field="鞎痊鈭?>
+                </div>
+
+                <!-- ?唳???-->
+                <div class="field-group">
+                    <span class="field-icon">??</span>
+                    <input type="date" class="edit-field date" value="${escapeHtmlAttribute(props.?唳???|| '')}" data-field="?唳???>
+                </div>
+
+                <!-- ???-->
+                <div class="field-group">
+                    <span class="field-icon">??</span>
+                    <select class="edit-field status" data-field="???>
+                        <option value="?芷?憪? ${props.???=== '?芷?憪? ? 'selected' : ''}>?芷?憪?/option>
+                        <option value="?脰?銝? ${props.???=== '?脰?銝? ? 'selected' : ''}>?脰?銝?/option>
+                        <option value="摰?" ${props.???=== '摰?' ? 'selected' : ''}>摰?</option>
+                    </select>
+                </div>
+            </div>
+          </div>
+        </div>
+      `;
+        }).join('')}
+    </div>
+  `;
+    } else {
+        // Display simple string array as editable textareas
+        html = `
+    <div class="key-points-list">
+      ${keyPoints.map((point, index) => `
+        <div class="key-point-item simple">
+          <div class="key-point-number">${index + 1}</div>
+          <div class="key-point-content">
+            <textarea class="edit-field simple-item" rows="2" data-index="${index}">${escapeHtml(point)}</textarea>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+    }
+
+    container.innerHTML = html;
+
+    // Show copy button
+    const copyBtn = document.getElementById('copyKeyPoints');
+    if (copyBtn) {
+        copyBtn.style.display = 'inline-flex';
+    }
+
+    console.log(`??Displayed ${keyPoints.length} editable items`);
+}
+
+/**
+ * Helper to escape HTML attributes
+ */
+function escapeHtmlAttribute(text) {
+    if (!text) return '';
+    return text.toString().replace(/"/g, '&quot;');
+}
+
+/**
+ * Escape HTML to prevent XSS
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text
+ */
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Copy key points to clipboard
+ */
+function copyKeyPointsToClipboard() {
+    if (!currentKeyPoints || currentKeyPoints.length === 0) {
+        alert('瘝????臭誑銴ˊ');
+        return;
+    }
+
+    const text = currentKeyPoints
+        .map((point, index) => `${index + 1}. ${point}`)
+        .join('\n');
+
+    navigator.clipboard.writeText(text).then(() => {
+        showStatusMessage('撌脰?鋆賢?芾票蝪?, 'success');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showStatusMessage('銴ˊ憭望?', 'error');
+    });
+}
+
+/**
+ * Show status message
+ * @param {string} message - Message to show
+ * @param {string} type - Message type (success, error, info)
+ */
+function showStatusMessage(message, type = 'info') {
+    const statusDiv = document.getElementById('statusMessage');
+    if (!statusDiv) return;
+
+    statusDiv.textContent = message;
+    statusDiv.className = `status-message status-${type}`;
+    statusDiv.style.display = 'block';
+
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 3000);
+}
+
+/**
+ * Call OpenAI Assistants API
+ * @param {string} text - Text to analyze
+ * @param {string} assistantId - Assistant ID (asst_...)
+ * @param {string} apiKey - API key
+ * @returns {Promise<Array>} Key points
+ */
+async function callOpenAIAssistant(text, assistantId, apiKey, targetLanguage = 'Traditional Chinese') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const baseUrl = isLocalhost ? '/api/openai/v1' : 'https://api.openai.com/v1';
+
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'OpenAI-Beta': 'assistants=v2'
+    };
+
+    try {
+        // 1. Create a Thread
+        const threadResponse = await fetch(`${baseUrl}/threads`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                messages: [{
+                    role: 'user',
+                    content: `Please output in ${targetLanguage}.`
+                }]
+            })
+        });
+
+        if (!threadResponse.ok) {
+            const errorText = await threadResponse.text();
+            throw new Error(`Failed to create thread: ${threadResponse.status} - ${errorText}`);
+        }
+
+        const thread = await threadResponse.json();
+        const threadId = thread.id;
+
+        // 2. Add a Message to the Thread
+        const prompt = text; // Assistants have their own instructions
+
+        const messageResponse = await fetch(`${baseUrl}/threads/${threadId}/messages`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                role: 'user',
+                content: prompt
+            })
+        });
+
+        if (!messageResponse.ok) {
+            const errorText = await messageResponse.text();
+            throw new Error(`Failed to add message: ${messageResponse.status} - ${errorText}`);
+        }
+
+        // 3. Create a Run
+        const runResponse = await fetch(`${baseUrl}/threads/${threadId}/runs`, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+                assistant_id: assistantId
+            })
+        });
+
+        if (!runResponse.ok) {
+            const errorText = await runResponse.text();
+            throw new Error(`Failed to create run: ${runResponse.status} - ${errorText}`);
+        }
+
+        const run = await runResponse.json();
+        if (!run.id) throw new Error(run.error?.message || 'Failed to create run');
+        const runId = run.id;
+
+        // 4. Poll for completion
+        let status = run.status;
+        let pollCount = 0;
+        const maxPolls = 30; // Timeout after 45 seconds (reduced from 90s)
+
+        console.log(`[Client] Initial run status: ${status}`);
+        console.log(`[Client] Starting polling for run: ${runId}`);
+
+        while (status === 'queued' || status === 'in_progress' || status === 'requires_action') {
+            if (pollCount >= maxPolls) {
+                throw new Error(`Assistant response timeout after ${maxPolls * 1.5} seconds. Status: ${status}`);
+            }
+
+            // Show progress to user
+            if (typeof showStatusMessage === 'function') {
+                showStatusMessage(`AI ??銝?.. (${pollCount + 1}/${maxPolls})`, 'info');
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            const pollResponse = await fetch(`${baseUrl}/threads/${threadId}/runs/${runId}`, {
+                method: 'GET',
+                headers: headers
+            });
+
+            if (!pollResponse.ok) {
+                const errorText = await pollResponse.text();
+                throw new Error(`Failed to poll run status: ${pollResponse.status} - ${errorText}`);
+            }
+
+            const poll = await pollResponse.json();
+            status = poll.status;
+            pollCount++;
+
+            console.log(`[Client] Poll #${pollCount}: status = ${status}`);
+
+            if (status === 'failed' || status === 'cancelled' || status === 'expired') {
+                const errorMsg = poll.last_error?.message || 'Unknown error';
+                throw new Error(`Assistant Run ${status}: ${errorMsg}`);
+            }
+
+            // Handle requires_action (e.g., function calls)
+            if (status === 'requires_action') {
+                console.warn('[Client] Run requires action - this is not supported yet');
+                throw new Error('Assistant requires action (function calls) which is not currently supported');
+            }
+        }
+
+        console.log(`[Client] Run completed with status: ${status} after ${pollCount} polls`);
+
+        // 5. Retrieve the Messages
+        const messagesResponse = await fetch(`${baseUrl}/threads/${threadId}/messages`, {
+            method: 'GET',
+            headers: headers
+        });
+
+        if (!messagesResponse.ok) {
+            const errorText = await messagesResponse.text();
+            throw new Error(`Failed to retrieve messages: ${messagesResponse.status} - ${errorText}`);
+        }
+
+        const messagesData = await messagesResponse.json();
+
+        // Find the last assistant message
+        const lastMessage = messagesData.data.find(m => m.role === 'assistant');
+        const generatedText = lastMessage?.content?.[0]?.text?.value || '';
+
+        return parseKeyPoints(generatedText);
+
+    } catch (error) {
+        console.error('OpenAI Assistant Error:', error);
+        throw error;
+    }
+}
