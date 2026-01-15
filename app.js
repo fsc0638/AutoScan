@@ -46,7 +46,6 @@ const elements = {
 
   // Results
   keyPointsContainer: document.getElementById('keyPointsContainer'),
-  copyKeyPoints: document.getElementById('copyKeyPoints'),
   uploadToNotion: document.getElementById('uploadToNotion')
 };
 
@@ -130,16 +129,6 @@ function setupEventListeners() {
     elements.analyzeBtn.addEventListener('click', startAnalysis);
   }
 
-  // Copy button
-  if (elements.copyKeyPoints) {
-    elements.copyKeyPoints.addEventListener('click', () => {
-      if (typeof window.copyKeyPointsToClipboard === 'function') {
-        window.copyKeyPointsToClipboard();
-      } else {
-        copyToClipboard();
-      }
-    });
-  }
 
   // Notion button
   if (elements.uploadToNotion) {
@@ -248,7 +237,6 @@ function handleFile(file) {
   // Clear previous transcript
   transcript = '';
   elements.keyPointsContainer.innerHTML = '<div class="empty-state">檔案已載入，請點擊「分析文字」進行分析</div>';
-  elements.copyKeyPoints.style.display = 'none';
   elements.uploadToNotion.style.display = 'none';
 
   // Process based on type
@@ -711,29 +699,6 @@ function collectKeyPointsFromUI() {
   return points;
 }
 
-function copyToClipboard() {
-  // Sync with UI first
-  collectKeyPointsFromUI();
-
-  if (!currentKeyPoints.length) return;
-
-  // Format based on type
-  let text = '';
-  const isStructured = currentKeyPoints.length > 0 && typeof currentKeyPoints[0] === 'object';
-
-  if (isStructured) {
-    text = currentKeyPoints.map((p, i) => {
-      const props = p.properties;
-      return `${i + 1}. ${props.ToDo || '無標題'} [${props.狀態}]`;
-    }).join('\n');
-  } else {
-    text = currentKeyPoints.map((p, i) => `${i + 1}. ${p}`).join('\n');
-  }
-
-  navigator.clipboard.writeText(text).then(() => {
-    showStatus('已複製到剪貼簿 (含修改)', 'success');
-  });
-}
 
 // ==========================================
 // 9. Start Application

@@ -445,12 +445,6 @@ function displayKeyPoints(keyPoints) {
 
     container.innerHTML = html;
 
-    // Show copy button
-    const copyBtn = document.getElementById('copyKeyPoints');
-    if (copyBtn) {
-        copyBtn.style.display = 'inline-flex';
-    }
-
     console.log(`✅ Displayed ${keyPoints.length} editable items`);
 }
 
@@ -473,26 +467,6 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-/**
- * Copy key points to clipboard
- */
-function copyKeyPointsToClipboard() {
-    if (!currentKeyPoints || currentKeyPoints.length === 0) {
-        alert('沒有重點可以複製');
-        return;
-    }
-
-    const text = currentKeyPoints
-        .map((point, index) => `${index + 1}. ${point}`)
-        .join('\n');
-
-    navigator.clipboard.writeText(text).then(() => {
-        showStatusMessage('已複製到剪貼簿', 'success');
-    }).catch(err => {
-        console.error('Failed to copy:', err);
-        showStatusMessage('複製失敗', 'error');
-    });
-}
 
 /**
  * Show status message
