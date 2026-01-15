@@ -8,6 +8,20 @@ config.js
 .env
 .env.local
 
+# 服務帳號金鑰和敏感 JSON
+service-account-key.json
+*-key.json
+notion_database_*_export.json
+
+# 測試和轉換腳本
+test_*.js
+convert-to-html.js
+
+# 備份和清理版本
+*-clean.js
+*-backup.js
+*-old.js
+
 # 其他敏感文件
 secrets/
 credentials/

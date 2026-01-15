@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoScan 安裝使用手冊</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { 
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 { 
+            color: #34495e;
+            margin-top: 30px;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 8px;
+        }
+        h3 { 
+            color: #7f8c8d;
+        }
+        code {
+            background: #f8f8f8;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        pre code {
+            background: transparent;
+            color: inherit;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        blockquote {
+            border-left: 4px solid #3498db;
+            margin: 20px 0;
+            padding: 10px 20px;
+            background: #f8f9fa;
+        }
+        .tip, .important, .caution, .note, .warning {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .tip {
+            background: #d4edda;
+            border-color: #28a745;
+        }
+        .important {
+            background: #fff3cd;
+            border-color: #ffc107;
+        }
+        .caution {
+            background: #f8d7da;
+            border-color: #dc3545;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AutoScan 安裝使用手冊</h1>
+<blockquote>
+<p>📘 <strong>本手冊專為不熟悉程式語言的使用者設計，將以最簡單的方式帶您完成安裝與設定。</strong></p>
+</blockquote>
+<hr>
+<h2>📋 目錄</h2>
+<ol>
+<li><a href="#1-%E5%AE%89%E8%A3%9D%E5%89%8D%E6%BA%96%E5%82%99">安裝前準備</a></li>
+<li><a href="#2-%E4%B8%8B%E8%BC%89%E8%88%87%E8%A7%A3%E5%A3%93%E7%B8%AE%E7%A8%8B%E5%BC%8F">下載與解壓縮程式</a></li>
+<li><a href="#3-%E5%AE%89%E8%A3%9D%E5%BF%85%E8%A6%81%E8%BB%9F%E9%AB%94">安裝必要軟體</a></li>
+<li><a href="#4-%E8%A8%AD%E5%AE%9A-api-%E9%87%91%E9%91%B0">設定 API 金鑰</a></li>
+<li><a href="#5-%E5%95%9F%E5%8B%95%E7%A8%8B%E5%BC%8F">啟動程式</a></li>
+<li><a href="#6-%E9%96%8B%E5%A7%8B%E4%BD%BF%E7%94%A8">開始使用</a></li>
+<li><a href="#7-%E5%B8%B8%E8%A6%8B%E5%95%8F%E9%A1%8C%E6%8E%92%E8%A7%A3">常見問題排解</a></li>
+</ol>
+<hr>
+<h2>1. 安裝前準備</h2>
+<h3>📝 需要準備的資料</h3>
+<p>在開始安裝前，您需要準備以下資訊：</p>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>取得方式</th>
+<th>必要性</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Gemini API Key</strong></td>
+<td><a href="https://aistudio.google.com/app/apikey">Google AI Studio</a></td>
+<td>✅ 必要</td>
+</tr>
+<tr>
+<td><strong>OpenAI API Key</strong></td>
+<td><a href="https://platform.openai.com/api-keys">OpenAI Platform</a></td>
+<td>⚠️ 可選</td>
+</tr>
+<tr>
+<td><strong>Notion Token</strong></td>
+<td><a href="https://www.notion.so/my-integrations">Notion Integrations</a></td>
+<td>✅ 必要</td>
+</tr>
+<tr>
+<td><strong>Notion Database ID</strong></td>
+<td>從 Notion 資料庫網址取得</td>
+<td>✅ 必要</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p>[!TIP]
+建議先準備好所有資料再開始安裝，這樣可以一次完成所有設定。</p>
+</blockquote>
+<hr>
+<h2>2. 下載與解壓縮程式</h2>
+<h3>步驟 2.1：從 GitHub 下載程式</h3>
+<ol>
+<li><p>開啟瀏覽器，前往：</p>
+<pre><code>https://github.com/您的帳號/AutoScan
+</code></pre>
+</li>
+<li><p>點擊綠色的 <strong>「Code」</strong> 按鈕</p>
+</li>
+<li><p>選擇 <strong>「Download ZIP」</strong></p>
+</li>
+<li><p>將下載的 ZIP 檔案儲存到您的電腦（建議放在「文件」資料夾）</p>
+</li>
+</ol>
+<h3>步驟 2.2：解壓縮檔案</h3>
+<ol>
+<li><p>找到下載的 <code>AutoScan-main.zip</code> 檔案</p>
+</li>
+<li><p>在檔案上按右鍵，選擇 <strong>「解壓縮全部」</strong></p>
+</li>
+<li><p>選擇解壓縮位置（例如：<code>C:\Users\您的使用者名稱\Documents\AutoScan</code>）</p>
+</li>
+<li><p>完成後會看到一個名為 <code>AutoScan</code> 的資料夾</p>
+</li>
+</ol>
+<hr>
+<h2>3. 安裝必要軟體</h2>
+<h3>步驟 3.1：安裝 Node.js</h3>
+<blockquote>
+<p>[!IMPORTANT]
+Node.js 是 AutoScan 運行所需的基礎軟體，必須先安裝。</p>
+</blockquote>
+<ol>
+<li><p><strong>下載 Node.js：</strong></p>
+<ul>
+<li>前往：<a href="https://nodejs.org/">https://nodejs.org/</a></li>
+<li>下載 <strong>LTS 版本</strong>（左邊的按鈕，推薦大多數使用者使用）</li>
+<li>檔案名稱類似：<code>node-v20.x.x-x64.msi</code></li>
+</ul>
+</li>
+<li><p><strong>安裝 Node.js：</strong></p>
+<ul>
+<li>雙擊下載的安裝檔</li>
+<li>一路點選 <strong>「Next」</strong>（下一步）</li>
+<li>保持預設設定即可</li>
+<li>最後點選 <strong>「Install」</strong>（安裝）</li>
+<li>安裝完成後點選 <strong>「Finish」</strong>（完成）</li>
+</ul>
+</li>
+<li><p><strong>驗證安裝：</strong></p>
+<ul>
+<li>按下鍵盤 <strong><code>Windows + R</code></strong></li>
+<li>輸入 <code>cmd</code> 後按 Enter</li>
+<li>在黑色視窗中輸入：<pre><code>node --version
+</code></pre>
+</li>
+<li>如果顯示版本號（例如：<code>v20.11.0</code>），表示安裝成功 ✅</li>
+</ul>
+</li>
+</ol>
+<h3>步驟 3.2：安裝程式相依套件</h3>
+<ol>
+<li><p><strong>開啟命令提示字元：</strong></p>
+<ul>
+<li>按下鍵盤 <strong><code>Windows + R</code></strong></li>
+<li>輸入 <code>cmd</code> 後按 Enter</li>
+</ul>
+</li>
+<li><p><strong>進入程式資料夾：</strong></p>
+<pre><code>cd C:\Users\您的使用者名稱\Documents\AutoScan
+</code></pre>
+<blockquote>
+<p>[!TIP]
+可以直接在檔案總管中開啟 AutoScan 資料夾，然後在網址列輸入 <code>cmd</code> 並按 Enter，會自動在該資料夾開啟命令提示字元。</p>
+</blockquote>
+</li>
+<li><p><strong>安裝相依套件：</strong></p>
+<pre><code>npm install
+</code></pre>
+<blockquote>
+<p>⏳ 這個步驟需要幾分鐘時間，請耐心等待。安裝完成後會看到類似以下訊息：</p>
+</blockquote>
+<pre><code>added 50 packages in 30s
+</code></pre>
+</li>
+</ol>
+<hr>
+<h2>4. 設定 API 金鑰</h2>
+<p>這是最重要的步驟！您需要將準備好的 API 金鑰填入配置檔案。</p>
+<h3>步驟 4.1：取得 Gemini API Key</h3>
+<ol>
+<li><p><strong>前往 Google AI Studio：</strong></p>
+<ul>
+<li>開啟瀏覽器，前往：<a href="https://aistudio.google.com/app/apikey">https://aistudio.google.com/app/apikey</a></li>
+<li>使用您的 Google 帳號登入</li>
+</ul>
+</li>
+<li><p><strong>創建 API Key：</strong></p>
+<ul>
+<li>點擊 <strong>「Create API key」</strong>（建立 API 金鑰）</li>
+<li>選擇或創建一個 Google Cloud 專案</li>
+<li>複製生成的 API Key（格式：<code>AIzaSy...</code>）</li>
+</ul>
+<blockquote>
+<p>[!CAUTION]
+API Key 很重要，請妥善保管，不要分享給他人！</p>
+</blockquote>
+</li>
+<li><p><strong>儲存 API Key：</strong></p>
+<ul>
+<li>建議先複製到記事本（後續設定會用到）</li>
+</ul>
+</li>
+</ol>
+<h3>步驟 4.2：取得 OpenAI API Key（可選）</h3>
+<blockquote>
+<p>[!NOTE]
+如果您只想使用 Gemini，可以跳過此步驟。</p>
+</blockquote>
+<ol>
+<li><p><strong>前往 OpenAI Platform：</strong></p>
+<ul>
+<li>開啟瀏覽器，前往：<a href="https://platform.openai.com/api-keys">https://platform.openai.com/api-keys</a></li>
+<li>登入您的 OpenAI 帳號（需要先註冊）</li>
+</ul>
+</li>
+<li><p><strong>創建 API Key：</strong></p>
+<ul>
+<li>點擊 <strong>「Create new secret key」</strong></li>
+<li>輸入名稱（例如：<code>AutoScan</code>）</li>
+<li>複製生成的 API Key（格式：<code>sk-proj-...</code>）</li>
+</ul>
+</li>
+<li><p><strong>儲存 API Key：</strong></p>
+<ul>
+<li>複製到記事本備用</li>
+</ul>
+</li>
+</ol>
+<h3>步驟 4.3：取得 Notion 設定</h3>
+<h4>A. 創建 Notion Integration</h4>
+<ol>
+<li><p><strong>前往 Notion Integrations：</strong></p>
+<ul>
+<li>開啟瀏覽器，前往：<a href="https://www.notion.so/my-integrations">https://www.notion.so/my-integrations</a></li>
+<li>點擊 <strong>「New integration」</strong>（新增整合）</li>
+</ul>
+</li>
+<li><p><strong>設定 Integration：</strong></p>
+<ul>
+<li><strong>Name（名稱）</strong>：輸入 <code>AutoScan</code></li>
+<li><strong>Associated workspace</strong>：選擇您的工作區</li>
+<li>點擊 <strong>「Submit」</strong>（提交）</li>
+</ul>
+</li>
+<li><p><strong>複製 Token：</strong></p>
+<ul>
+<li>在 <strong>「Internal Integration Token」</strong> 區域</li>
+<li>點擊 <strong>「Show」</strong> 然後複製 Token（格式：<code>secret_...</code> 或 <code>ntn_...</code>）</li>
+<li>儲存到記事本</li>
+</ul>
+</li>
+</ol>
+<h4>B. 取得 Database ID</h4>
+<ol>
+<li><p><strong>開啟您的 Notion 資料庫：</strong></p>
+<ul>
+<li>在瀏覽器中開啟要使用的 Notion 資料庫頁面</li>
+</ul>
+</li>
+<li><p><strong>從網址取得 Database ID：</strong></p>
+<p>網址格式：</p>
+<pre><code>https://www.notion.so/您的工作區名稱/資料庫ID?v=...
+</code></pre>
+<p>例如：</p>
+<pre><code>https://www.notion.so/myworkspace/1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p?v=...
+</code></pre>
+<p>Database ID 就是中間那一串 32 位數的代碼：</p>
+<pre><code>1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p
+</code></pre>
+</li>
+<li><p><strong>複製 Database ID：</strong></p>
+<ul>
+<li>選取並複製這 32 位數的代碼</li>
+<li>儲存到記事本</li>
+</ul>
+</li>
+<li><p><strong>授予 Integration 存取權限：</strong></p>
+<ul>
+<li>在 Notion 資料庫頁面右上角，點擊 <strong>「•••」</strong>（三個點）</li>
+<li>選擇 <strong>「Connections」</strong> 或 <strong>「連結」</strong></li>
+<li>搜尋並選擇剛才創建的 <strong>「AutoScan」</strong> Integration</li>
+<li>點擊 <strong>「Confirm」</strong>（確認）</li>
+</ul>
+</li>
+</ol>
+<h3>步驟 4.4：填寫配置檔案</h3>
+<p>現在將所有 API Key 填入配置檔案。</p>
+<ol>
+<li><p><strong>開啟配置檔案：</strong></p>
+<ul>
+<li>進入 <code>AutoScan</code> 資料夾</li>
+<li>找到 <code>config.js</code> 檔案</li>
+<li>在檔案上按右鍵，選擇 <strong>「以記事本開啟」</strong> 或使用任何文字編輯器</li>
+</ul>
+</li>
+<li><p><strong>填入 API Keys：</strong></p>
+</li>
+</ol>
+<p>找到以下內容並替換成您的資料：</p>
+<pre><code class="language-javascript">window.AUTOSCAN_CONFIG = {
+  gemini: {
+    apiKey: &quot;在這裡貼上您的 Gemini API Key&quot;,
+    agents: [
+      {
+        name: &quot;Gemini AutoScan Agent(模擬)&quot;,
+        agentKey: &quot;gemini-3-flash-preview&quot;,
+      },
+    ],
+  },
+  openai: {
+    agentName: &quot;OpenAI AutoScan Agent(模擬)&quot;,
+    apiKey: &quot;在這裡貼上您的 OpenAI API Key（如果有）&quot;,
+    assistantId: &quot;保持原值或填入您的 Assistant ID&quot;,
+  },
+  notion: {
+    agentName: &quot;Notion Sync Bot&quot;,
+    token: &quot;在這裡貼上您的 Notion Token&quot;,
+    databaseId: &quot;在這裡貼上您的 Notion Database ID&quot;,
+    titlePropertyName: &quot;Name&quot;,
+  },
+};
+</code></pre>
+<ol start="3">
+<li><strong>填寫範例說明：</strong></li>
+</ol>
+<p><strong>Gemini API Key：</strong></p>
+<ul>
+<li>格式：以 <code>AIzaSy</code> 開頭，後面接 32 位英數字</li>
+<li>範例：<code>AIzaSyA1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q</code>（請替換成您的實際 Key）</li>
+</ul>
+<p><strong>OpenAI API Key：</strong></p>
+<ul>
+<li>格式：以 <code>sk-proj-</code> 或 <code>sk-</code> 開頭</li>
+<li>範例：<code>sk-proj-AbCdEf123456...</code>（請替換成您的實際 Key）</li>
+</ul>
+<p><strong>Notion Token：</strong></p>
+<ul>
+<li>格式：以 <code>secret_</code> 或 <code>ntn_</code> 開頭</li>
+<li>範例：<code>secret_a1b2c3d4e5f6...</code> 或 <code>ntn_123456789abcdef...</code>（請替換成您的實際 Token）</li>
+</ul>
+<p><strong>Notion Database ID：</strong></p>
+<ul>
+<li>格式：32 位英數字（不含連字號）</li>
+<li>範例：<code>1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p</code>（請替換成您的實際 Database ID）</li>
+</ul>
+<blockquote>
+<p>[!CAUTION] &gt; <strong>安全提醒：</strong></p>
+<ul>
+<li>以上範例僅為格式說明，請勿直接使用</li>
+<li>請使用您自己申請的真實 API Key</li>
+<li>切勿將包含真實 API Key 的配置檔案分享給他人或上傳到公開位置</li>
+</ul>
+</blockquote>
+<ol start="4">
+<li><strong>儲存檔案：</strong><ul>
+<li>按 <strong><code>Ctrl + S</code></strong> 儲存</li>
+<li>關閉文字編輯器</li>
+</ul>
+</li>
+</ol>
+<blockquote>
+<p>[!IMPORTANT] &gt; <strong>檢查清單：</strong></p>
+<ul>
+<li>✅ 所有引號 <code>&quot;</code> 都保持完整</li>
+<li>✅ 所有逗號 <code>,</code> 都保留</li>
+<li>✅ 沒有多餘的空格或換行</li>
+<li>✅ API Key 完整複製（沒有少字元）</li>
+</ul>
+</blockquote>
+<hr>
+<h2>5. 啟動程式</h2>
+<h3>步驟 5.1：啟動伺服器</h3>
+<ol>
+<li><p><strong>開啟命令提示字元：</strong></p>
+<ul>
+<li>在 AutoScan 資料夾的網址列輸入 <code>cmd</code> 並按 Enter</li>
+</ul>
+</li>
+<li><p><strong>啟動程式：</strong></p>
+<pre><code>npm start
+</code></pre>
+</li>
+<li><p><strong>確認啟動成功：</strong></p>
+<p>您應該會看到以下訊息：</p>
+<pre><code>🚀 AutoScan Server is running!
+----------------------------------
+🔗 URL: http://localhost:3000
+📁 Dir: C:\Users\...\AutoScan
+----------------------------------
+Waiting for connections...
+</code></pre>
+<blockquote>
+<p>[!TIP]
+看到這個訊息表示啟動成功！<strong>不要關閉這個黑色視窗</strong>，程式需要持續運行。</p>
+</blockquote>
+</li>
+</ol>
+<h3>步驟 5.2：開啟瀏覽器</h3>
+<ol>
+<li><p><strong>開啟瀏覽器</strong> (Chrome、Edge、Firefox 都可以)</p>
+</li>
+<li><p><strong>前往程式網址：</strong></p>
+<pre><code>http://localhost:3000
+</code></pre>
+</li>
+<li><p><strong>確認頁面載入：</strong></p>
+<ul>
+<li>您應該會看到 AutoScan 的操作介面</li>
+<li>有深色星空背景</li>
+<li>標題：「文件重點分析系統 | AutoScan」</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>6. 開始使用</h2>
+<h3>🎯 基本操作流程</h3>
+<ol>
+<li><p><strong>選擇輸入方式：</strong></p>
+<ul>
+<li><strong>上傳文件檔案</strong>：支援 TXT、Word (.docx)、PDF</li>
+<li><strong>貼上逐字稿文字</strong>：直接貼上文字內容</li>
+</ul>
+</li>
+<li><p><strong>選擇語言：</strong></p>
+<ul>
+<li>預設為「繁體中文」</li>
+<li>可切換為其他語言</li>
+</ul>
+</li>
+<li><p><strong>選擇 AI 模型：</strong></p>
+<ul>
+<li><strong>Gemini</strong>：Google 的 AI 模型（推薦）</li>
+<li><strong>OpenAI</strong>：OpenAI 的 GPT 模型</li>
+</ul>
+</li>
+<li><p><strong>選擇 Agent：</strong></p>
+<ul>
+<li><strong>Gemini AutoScan Agent (模擬)</strong>：結構化輸出，適合上傳到 Notion</li>
+<li><strong>OpenAI AutoScan Agent (模擬)</strong>：結構化輸出</li>
+</ul>
+</li>
+<li><p><strong>分析文字：</strong></p>
+<ul>
+<li>點擊 <strong>「🔍 分析文字」</strong> 按鈕</li>
+<li>等待 AI 分析完成（通常需要 10-30 秒）</li>
+</ul>
+</li>
+<li><p><strong>查看結果：</strong></p>
+<ul>
+<li>分析完成後會顯示多個欄位的表單</li>
+<li>包含：ToDo、歸屬分類、專案、負責人、到期日等</li>
+</ul>
+</li>
+<li><p><strong>上傳到 Notion：</strong></p>
+<ul>
+<li>確認內容無誤後</li>
+<li>點擊 <strong>「📤 上傳至 Notion」</strong> 按鈕</li>
+<li>系統會自動將所有項目上傳到您的 Notion 資料庫</li>
+</ul>
+</li>
+</ol>
+<h3>📝 使用範例</h3>
+<p><strong>情境：分析會議記錄</strong></p>
+<ol>
+<li>上傳會議記錄 PDF 檔案</li>
+<li>選擇「Gemini」+ 「Gemini AutoScan Agent (模擬)」</li>
+<li>點擊「分析文字」</li>
+<li>AI 會自動提取：<ul>
+<li>待辦事項（ToDo）</li>
+<li>分類（例如：產品開發、市場分析）</li>
+<li>專案名稱</li>
+<li>負責人</li>
+<li>到期日</li>
+<li>關鍵字</li>
+</ul>
+</li>
+<li>檢查並編輯內容（可直接在表單中修改）</li>
+<li>點擊「上傳至 Notion」</li>
+<li>完成！所有項目會出現在您的 Notion 資料庫中</li>
+</ol>
+<hr>
+<h2>7. 常見問題排解</h2>
+<h3>❌ 問題 1：「找不到 node」或「npm 不是內部或外部命令」</h3>
+<p><strong>原因：</strong> Node.js 未正確安裝或未加入環境變數</p>
+<p><strong>解決方法：</strong></p>
+<ol>
+<li>重新安裝 Node.js（參考步驟 3.1）</li>
+<li>安裝時確保勾選 <strong>「Add to PATH」</strong> 選項</li>
+<li>重新啟動電腦後再試</li>
+</ol>
+<hr>
+<h3>❌ 問題 2：「API key expired」或「未設定 API 金鑰」</h3>
+<p><strong>原因：</strong> API Key 未正確填入或已過期</p>
+<p><strong>解決方法：</strong></p>
+<ol>
+<li>檢查 <code>config.js</code> 檔案中的 API Key 是否完整</li>
+<li>確認 API Key 沒有包含多餘的空格</li>
+<li>如果 API Key 過期，重新生成新的 Key</li>
+</ol>
+<hr>
+<h3>❌ 問題 3：「Request too large」或「檔案太大」</h3>
+<p><strong>原因：</strong> 上傳的檔案超過限制</p>
+<p><strong>解決方法：</strong></p>
+<ol>
+<li>目前支援最大 100MB 的檔案</li>
+<li>如果檔案過大，可以：<ul>
+<li>分割成較小的部分</li>
+<li>或使用較小的模型（gpt-4o-mini）</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3>❌ 問題 4：上傳到 Notion 失敗</h3>
+<p><strong>原因：</strong> Notion Integration 未正確設定或資料庫 ID 錯誤</p>
+<p><strong>解決方法：</strong></p>
+<ol>
+<li>確認已在 Notion 資料庫中連結 AutoScan Integration</li>
+<li>檢查 Database ID 是否正確（32 位數）</li>
+<li>確認 Notion Token 正確無誤</li>
+</ol>
+<hr>
+<h3>❌ 問題 5：分析結果是亂碼或格式錯誤</h3>
+<p><strong>原因：</strong> 語言設定不正確或 AI 模型回傳格式異常</p>
+<p><strong>解決方法：</strong></p>
+<ol>
+<li>確認選擇正確的語言（繁體中文）</li>
+<li>選擇「AutoScan Agent」模式</li>
+<li>重新整理頁面後再試一次（按 F5）</li>
+</ol>
+<hr>
+<h2>📞 需要協助？</h2>
+<p>如果遇到其他問題，請聯絡技術支援人員，並提供：</p>
+<ol>
+<li><strong>錯誤訊息截圖</strong>（如果有）</li>
+<li><strong>瀏覽器 Console 的錯誤訊息</strong>（按 F12 開啟）</li>
+<li><strong>您的作業系統版本</strong>（Windows 10/11）</li>
+<li><strong>使用的瀏覽器</strong>（Chrome/Edge/Firefox）</li>
+</ol>
+<hr>
+<h2>✅ 安裝完成檢查清單</h2>
+<p>安裝完成後，請確認以下項目：</p>
+<ul>
+<li><input disabled="" type="checkbox"> Node.js 已安裝且版本正確</li>
+<li><input disabled="" type="checkbox"> 程式相依套件已安裝完成（<code>npm install</code> 成功）</li>
+<li><input disabled="" type="checkbox"> <code>config.js</code> 已填入所有必要的 API Keys</li>
+<li><input disabled="" type="checkbox"> 伺服器可正常啟動（<code>npm start</code> 無錯誤）</li>
+<li><input disabled="" type="checkbox"> 瀏覽器可開啟 <a href="http://localhost:3000">http://localhost:3000</a></li>
+<li><input disabled="" type="checkbox"> Gemini 分析功能正常運作</li>
+<li><input disabled="" type="checkbox"> Notion 上傳功能正常運作</li>
+</ul>
+<p><strong>全部打勾即表示安裝成功！</strong> 🎉</p>
+<hr>
+<h2>📚 附錄</h2>
+<h3>A. 如何停止程式</h3>
+<ol>
+<li>在命令提示字元視窗按 <strong><code>Ctrl + C</code></strong></li>
+<li>出現提示時輸入 <strong><code>Y</code></strong> 並按 Enter</li>
+<li>關閉命令提示字元視窗</li>
+</ol>
+<h3>B. 如何重新啟動程式</h3>
+<ol>
+<li>開啟命令提示字元</li>
+<li>進入 AutoScan 資料夾</li>
+<li>執行 <code>npm start</code></li>
+</ol>
+<h3>C. 如何更新程式</h3>
+<ol>
+<li>停止正在運行的程式</li>
+<li>從 GitHub 下載最新版本</li>
+<li>解壓縮並覆蓋舊檔案</li>
+<li><strong>保留</strong>您的 <code>config.js</code> 檔案（備份後再覆蓋）</li>
+<li>重新啟動程式</li>
+</ol>
+<hr>
+<p><strong>版本：</strong> 1.0 (2026-01-15)<br><strong>適用分支：</strong> autoscan-Ruby-UAT-20260115</p>
+
+    </div>
+</body>
+</html>

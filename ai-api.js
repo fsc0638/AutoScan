@@ -21,6 +21,22 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     const model = getSelectedModel();
     const providerConfig = await getModelConfig(model.provider);
 
+    // 1. ROUTE TO VERTEX AI AGENT (If Toggle ON)
+    if (model.useAgent) {
+        if (typeof window.callVertexAgent === 'function') {
+            console.log('[AI API] Routing to Vertex AI Agent...');
+            try {
+                return await window.callVertexAgent(text);
+            } catch (agentError) {
+                console.error('[AI API] Vertex Agent Error:', agentError);
+                throw agentError;
+            }
+        } else {
+            throw new Error("Vertex AI Agent 模組未載入，請確認 vertex-agent-api.js 已正確引入");
+        }
+    }
+
+    // 2. STANDARD AI MODEL ROUTING
     // Determine the API Key: Priority: Agent's specific key > Provider's global key
     let apiKey = providerConfig?.apiKey;
 
@@ -45,24 +61,35 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
 
     const defaultVersions = {
         gemini: 'gemini-2.0-flash-exp',
-        openai: 'gpt-4o'
+        openai: 'gpt-4o-mini'
     };
 
     const modelVersion = defaultVersions[model.provider];
 
     try {
         if (model.provider === 'gemini') {
-            const targetModel = model.agent !== 'default' ? model.agent : modelVersion;
+            // Fix: Fallback to modelVersion if agent ID is invalid (e.g., 'gemini-3')
+            let targetModel = model.agent;
+            if (targetModel === 'default' || targetModel === 'undefined' || targetModel.includes('模拟') || !targetModel.startsWith('gemini')) {
+                targetModel = modelVersion;
+            }
+            
             // Pass agentLabel to determine if we should use structured output
             return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
         } else if (model.provider === 'openai') {
             if (model.agent !== 'default') {
-                // Use Assistants API for configured agents
-                const agentConfig = providerConfig.agents[model.agent];
-                return await callOpenAIAssistant(text, agentConfig.assistantId, apiKey, targetLanguage);
+                // Check if agent has assistantId (use Assistants API) or should use Chat Completion
+                const agentConfig = providerConfig.agents?.[model.agent];
+                if (agentConfig?.assistantId) {
+                    // Use Assistants API for configured assistants
+                    return await callOpenAIAssistant(text, agentConfig.assistantId, apiKey, targetLanguage);
+                } else {
+                    // Use Chat Completion API with agentLabel for System Instructions
+                    return await callOpenAIAPI(text, modelVersion, apiKey, model.agentLabel, targetLanguage);
+                }
             } else {
-                // Use Chat Completion API
-                return await callOpenAIAPI(text, modelVersion, apiKey, targetLanguage);
+                // Use Chat Completion API (pass agentLabel to support AutoScan agents)
+                return await callOpenAIAPI(text, modelVersion, apiKey, model.agentLabel, targetLanguage);
             }
         } else {
             throw new Error('不支援的語言模型');
@@ -141,24 +168,33 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
     if (useStructuredOutput) {
         // System Instructions for Notion data structuring (only for AutoScan Agent)
         systemInstruction = `# Role
-你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
+你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容或文件」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
 
 # Constraints (核心約束)
-1. **禁止堆疊**：嚴禁將所有資訊塞入 ToDo 欄位。ToDo 欄位僅能保留「具體動作的短句」。
-2. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-3.- **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
-4. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
-5. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
+1. **完整提取**：請仔細閱讀文件，提取所有重要的行動項目、討論重點、決策和待辦事項。目標是提取 5-20 個項目，如果內容豐富可以超過 20 個。
+2. **禁止堆疊**：每個項目應該是獨立的待辦事項或重點，不要將所有資訊塞入單一項目。
+3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
+4. **詳細描述**：ToDo 欄位應包含具體的行動項目及必要的背景說明，不要過度精簡。
+5. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
+6. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
+7. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
 
 # Field Mapping Logic (欄位對齊邏輯)
-- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約）。
-- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動）。
-- **ToDo (String)**: 僅提取「核心行動」，字數需精簡（例：與日本政府簽約）。
-- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。
-- **負責人 (Person)**: 提取提到的個人或實體（例：凱衛）。
-- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。
+- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、會議記錄、產品開發）。
+- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Q1 產品發布計劃）。
+- **ToDo (String)**: 包含具體的行動項目及必要背景。例如：「準備 Q1 產品發布簡報，需包含市場分析和競品比較」而非僅「準備簡報」。
+- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。如果提到「已完成」或「進行中」則相應設定。
+- **負責人 (Person)**: 提取提到的個人或團隊（例：凱衛、產品團隊、行銷部門）。
+- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。若提到「下週」等相對時間，請根據當前時間推算。
 - **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
 - **關鍵字 (Array of Objects)**: 提取 3-5 個「翻譯後」的核心關鍵字，並賦予 1-10 的權重（10 為最核心）。格式：[{"text": "關鍵字", "weight": 5}]。
+
+# Extraction Guidelines
+- 包含所有明確的行動項目（Action Items）
+- 提取重要的決策點和結論
+- 記錄需要跟進的討論主題
+- 識別風險、問題或待解決事項
+- 不要遺漏任何具體的日期、人名或專案名稱
 
 # JSON Output Structure
 [
@@ -167,7 +203,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
     "properties": {
       "歸屬分類": ["String"],
       "專案": ["String"],
-      "ToDo": "String (簡短行動)",
+      "ToDo": "String (詳細的行動項目描述)",
       "狀態": "未開始" | "進行中" | "完成",
       "負責人": "String",
       "到期日": "YYYY-MM-DD",
@@ -236,14 +272,87 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
  * @param {string} text - Text to analyze
  * @param {string} modelVersion - OpenAI model version
  * @param {string} apiKey - API key
+ * @param {string} agentLabel - Agent label to determine behavior
  * @param {string} targetLanguage - Target output language
- * @returns {Promise<Array>} Key points
+ * @returns {Promise<Array>} Key points or structured data
  */
-async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Traditional Chinese') {
-    const prompt = `Analyze and extract key points. Output language: ${targetLanguage}.\n\n${text}`;
-
+async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', targetLanguage = 'Traditional Chinese') {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const url = isLocalhost ? '/api/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+
+    // Determine if we should use structured output based on agent name
+    const useStructuredOutput = agentLabel.includes('AutoScan');
+
+    let messages = [];
+
+    if (useStructuredOutput) {
+        // System Instructions for Notion data structuring (only for AutoScan Agent)
+        const systemInstruction = `# Role
+你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容或文件」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
+
+# Constraints (核心約束)
+1. **完整提取**：請仔細閱讀文件，提取所有重要的行動項目、討論重點、決策和待辦事項。目標是提取 5-20 個項目，如果內容豐富可以超過 20 個。
+2. **禁止堆疊**：每個項目應該是獨立的待辦事項或重點，不要將所有資訊塞入單一項目。
+3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
+4. **詳細描述**：ToDo 欄位應包含具體的行動項目及必要的背景說明，不要過度精簡。
+5. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
+6. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
+7. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
+
+# Field Mapping Logic (欄位對齊邏輯)
+- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、會議記錄、產品開發）。
+- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Q1 產品發布計劃）。
+- **ToDo (String)**: 包含具體的行動項目及必要背景。例如：「準備 Q1 產品發布簡報，需包含市場分析和競品比較」而非僅「準備簡報」。
+- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。如果提到「已完成」或「進行中」則相應設定。
+- **負責人 (Person)**: 提取提到的個人或團隊（例：凱衛、產品團隊、行銷部門）。
+- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。若提到「下週」等相對時間，請根據當前時間推算。
+- **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
+- **關鍵字 (Array of Objects)**: 提取 3-5 個「翻譯後」的核心關鍵字，並賦予 1-10 的權重（10 為最核心）。格式：[{"text": "關鍵字", "weight": 5}]。
+
+# Extraction Guidelines
+- 包含所有明確的行動項目（Action Items）
+- 提取重要的決策點和結論
+- 記錄需要跟進的討論主題
+- 識別風險、問題或待解決事項
+- 不要遺漏任何具體的日期、人名或專案名稱
+
+# JSON Output Structure
+[
+  {
+    "operation": "CREATE",
+    "properties": {
+      "歸屬分類": ["String"],
+      "專案": ["String"],
+      "ToDo": "String (詳細的行動項目描述)",
+      "狀態": "未開始" | "進行中" | "完成",
+      "負責人": "String",
+      "到期日": "YYYY-MM-DD",
+      "建立時間": "YYYY-MM-DD HH:mm:ss",
+      "關鍵字": [{"text": "String", "weight": Number}]
+    }
+  }
+]`;
+
+        console.log('[OpenAI API] Using structured output mode for AutoScan Agent');
+
+        messages = [
+            {
+                role: 'system',
+                content: systemInstruction
+            },
+            {
+                role: 'user',
+                content: text
+            }
+        ];
+    } else {
+        console.log('[OpenAI API] Using simple prompt mode');
+        const prompt = `Analyze and extract key points. Output language: ${targetLanguage}.\n\n${text}`;
+        messages = [{
+            role: 'user',
+            content: prompt
+        }];
+    }
 
     const response = await fetch(url, {
         method: 'POST',
@@ -253,10 +362,7 @@ async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Tradi
         },
         body: JSON.stringify({
             model: modelVersion,
-            messages: [{
-                role: 'user',
-                content: prompt
-            }],
+            messages: messages,
             temperature: 0.7,
             max_tokens: 2048
         })
@@ -270,7 +376,12 @@ async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Tradi
     const data = await response.json();
     const generatedText = data.choices[0].message.content;
 
-    return parseKeyPoints(generatedText);
+    // Parse based on output mode
+    if (useStructuredOutput) {
+        return parseStructuredOutput(generatedText);
+    } else {
+        return parseKeyPoints(generatedText);
+    }
 }
 
 /**
@@ -280,30 +391,38 @@ async function callOpenAIAPI(text, modelVersion, apiKey, targetLanguage = 'Tradi
  */
 function parseStructuredOutput(text) {
     try {
-        // Remove markdown code block tags if present
+        // Remove markdown code block tags if present (more robust version)
         let cleanedText = text.trim();
-        if (cleanedText.startsWith('```json')) {
-            cleanedText = cleanedText.replace(/^```json\n/, '').replace(/\n```$/, '');
-        } else if (cleanedText.startsWith('```')) {
-            cleanedText = cleanedText.replace(/^```\n/, '').replace(/\n```$/, '');
-        }
+
+        // Remove markdown code blocks (```json or ```)
+        cleanedText = cleanedText.replace(/^```(?:json)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '');
+
+        // Trim again after removing code blocks
+        cleanedText = cleanedText.trim();
+
+        // Additional cleanup: remove any leading/trailing whitespace
+        cleanedText = cleanedText.replace(/^\s+|\s+$/g, '');
+
+        console.log('[AI API] Attempting to parse JSON:', cleanedText.substring(0, 100) + '...');
 
         // Try to parse as JSON
         const jsonData = JSON.parse(cleanedText);
 
         // Validate it's an array
         if (Array.isArray(jsonData) && jsonData.length > 0) {
-            console.log('[AI API] Parsed structured JSON output:', jsonData);
+            console.log('[AI API] Successfully parsed structured JSON output with', jsonData.length, 'items');
             return jsonData;
         }
 
         // If not valid array, fall back to simple parsing
-        console.warn('[AI API] JSON is not an array, falling back to simple parsing');
+        console.warn('[AI API] JSON is not an array or is empty, falling back to simple parsing');
+        console.warn('[AI API] Parsed data type:', typeof jsonData, 'Array:', Array.isArray(jsonData));
         return parseKeyPoints(text);
 
     } catch (error) {
         // If JSON parsing fails, fall back to simple key points parsing
-        console.warn('[AI API] Failed to parse as JSON, falling back to simple parsing:', error.message);
+        console.error('[AI API] Failed to parse as JSON:', error.message);
+        console.error('[AI API] Failed text (first 200 chars):', text.substring(0, 200));
         return parseKeyPoints(text);
     }
 }

@@ -20,8 +20,14 @@ class ConfigManager {
      * 3. localStorage (fallback)
      */
     async loadConfig() {
+        // Clear potential stale localStorage if requested by URL or on specific errors
+        if (window.location.search.includes('resetConfig=true')) {
+            localStorage.removeItem('autoscan_config');
+            console.log('🧹 Configuration reset requested via URL');
+        }
+
         // 1. Try from window object (Loaded via <script src="config.js">)
-        if (window.AUTOSCAN_CONFIG) {
+        if (window.AUTOSCAN_CONFIG && Object.keys(window.AUTOSCAN_CONFIG).length > 2) {
             this.config = window.AUTOSCAN_CONFIG;
             this.loaded = true;
             console.log('✅ Configuration loaded from window.AUTOSCAN_CONFIG');
@@ -30,23 +36,32 @@ class ConfigManager {
 
         // 2. Try fetch (for local server environments)
         try {
-            const response = await fetch('config.json');
+            const response = await fetch('/api/config'); // Preferred server-side config
             if (response.ok) {
                 this.config = await response.json();
                 this.loaded = true;
-                console.log('✅ Configuration loaded from config.json fetch');
+                console.log('✅ Configuration loaded from server API');
                 return this.config;
             }
         } catch (e) {
-            console.warn('ℹ️ JSON fetch failed (normal if opening from file://)');
+            // Fallback to direct file fetch
+            try {
+                const response = await fetch('config.json');
+                if (response.ok) {
+                    this.config = await response.json();
+                    this.loaded = true;
+                    console.log('✅ Configuration loaded from config.json fetch');
+                    return this.config;
+                }
+            } catch (e2) {}
         }
 
-        // 3. Try LocalStorage fallback
+        // 3. Try LocalStorage fallback (only if others fail)
         const stored = this.loadFromLocalStorage();
         if (stored) {
             this.config = stored;
             this.loaded = true;
-            console.log('✅ Configuration restored from localStorage');
+            console.log('✅ Configuration restored from localStorage fallback');
             return this.config;
         }
 
