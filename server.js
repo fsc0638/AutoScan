@@ -7,9 +7,10 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
-// Enable CORS and JSON parsing
+// Enable CORS and JSON parsing with 100MB limit
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '100mb' }));
+app.use(bodyParser.urlencoded({ limit: '100mb', extended: true }));
 
 // Serve static files from the project root
 app.use(express.static(__dirname));
