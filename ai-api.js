@@ -21,6 +21,22 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     const model = getSelectedModel();
     const providerConfig = await getModelConfig(model.provider);
 
+    // 1. ROUTE TO VERTEX AI AGENT (If Toggle ON)
+    if (model.useAgent) {
+        if (typeof window.callVertexAgent === 'function') {
+            console.log('[AI API] Routing to Vertex AI Agent...');
+            try {
+                return await window.callVertexAgent(text);
+            } catch (agentError) {
+                console.error('[AI API] Vertex Agent Error:', agentError);
+                throw agentError;
+            }
+        } else {
+            throw new Error("Vertex AI Agent 模組未載入，請確認 vertex-agent-api.js 已正確引入");
+        }
+    }
+
+    // 2. STANDARD AI MODEL ROUTING
     // Determine the API Key: Priority: Agent's specific key > Provider's global key
     let apiKey = providerConfig?.apiKey;
 
@@ -45,14 +61,19 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
 
     const defaultVersions = {
         gemini: 'gemini-2.0-flash-exp',
-        openai: 'gpt-4o-mini'  // Changed to mini for higher TPM limits
+        openai: 'gpt-4o-mini'
     };
 
     const modelVersion = defaultVersions[model.provider];
 
     try {
         if (model.provider === 'gemini') {
-            const targetModel = model.agent !== 'default' ? model.agent : modelVersion;
+            // Fix: Fallback to modelVersion if agent ID is invalid (e.g., 'gemini-3')
+            let targetModel = model.agent;
+            if (targetModel === 'default' || targetModel === 'undefined' || targetModel.includes('模拟') || !targetModel.startsWith('gemini')) {
+                targetModel = modelVersion;
+            }
+            
             // Pass agentLabel to determine if we should use structured output
             return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
         } else if (model.provider === 'openai') {
