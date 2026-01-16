@@ -280,7 +280,7 @@ function renderWordCloud(keywords) {
                     return (size * canvas.width) / 900;
                 },
                 fontFamily: 'Inter, sans-serif',
-                color: 'random-light',
+                color: 'random-dark',
                 backgroundColor: 'transparent',
                 rotateRatio: 0, // Force horizontal only
                 minRotation: 0,
@@ -308,12 +308,12 @@ function renderKeywordBarChart(keywords, container) {
     }, {
         scales: {
             x: {
-                ticks: { color: '#ffffff' },
-                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                ticks: { color: '#4B5563' },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' }
             },
             y: {
-                ticks: { color: '#ffffff' },
-                grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                ticks: { color: '#4B5563' },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' }
             }
         },
         plugins: {
@@ -346,10 +346,10 @@ function renderStatusChart(data, container) {
     }, {
         plugins: {
             legend: {
-                labels: { color: '#ffffff' }
+                labels: { color: '#4B5563' }
             },
             datalabels: {
-                color: '#ffffff',
+                color: '#4B5563',
                 formatter: (value, ctx) => {
                     let sum = 0;
                     let dataArr = ctx.chart.data.datasets[0].data;
@@ -404,7 +404,7 @@ function renderCategoryChart(data, container) {
             legend: {
                 position: 'bottom',
                 labels: {
-                    color: '#ffffff',
+                    color: '#4B5563',
                     font: { size: 12 },
                     padding: 15
                 }
@@ -459,7 +459,7 @@ function createChartCanvas(container, id, title, type, chartData, options = {}, 
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#ffffff', font: { size: 10 } }
+                    labels: { color: '#4B5563', font: { size: 10 } }
                 }
             },
             ...options

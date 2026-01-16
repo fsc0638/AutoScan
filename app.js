@@ -118,6 +118,9 @@ function setupEventListeners() {
 
   // File input
   if (elements.fileInput) {
+    elements.fileInput.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent bubbling to uploadZone
+    });
     elements.fileInput.addEventListener('change', (e) => {
       const files = e.target.files;
       if (files.length > 0) handleFile(files[0]);

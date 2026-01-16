@@ -7,6 +7,66 @@
 // ==========================================
 
 /**
+ * Get unified system instruction for AutoScan data structuring
+ * @param {string} targetLanguage - Language for the output
+ * @returns {string} The formatted system instruction string
+ */
+function getSystemInstruction(targetLanguage = 'Traditional Chinese') {
+    return `# OUTPUT LANGUAGE (重要：輸出語言要求)
+- ALL output content values MUST be in [${targetLanguage}].
+- 如果輸入是英文而要求是繁體中文，請務必翻譯。
+- 如果輸入是中文而要求是 English，請務必翻譯。
+
+# Role
+你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容或文件」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
+
+# Constraints (核心約束)
+1. **完整提取**：請仔細閱讀文件，提取所有重要的行動項目、討論重點、決策和待辦事項。目標是提取 15-20 個項目，如果內容豐富可以超過 20 個。
+2. **禁止堆疊**：每個項目應該是獨立的待辦事項或重點，不要將所有資訊塞入單一項目。
+3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
+4. **詳細描述**：ToDo 欄位應包含具體的行動項目及必要的背景說明，20 到 50 字元，不要過度精簡。
+5. **語言與鍵值校準**：
+   - **翻譯要求**：所有欄位的「內容值（Value）」必須完全使用 [${targetLanguage}]。
+   - **鍵值固定**：**絕對嚴禁翻譯或更動 JSON 的鍵值（Key Name）**。鍵值必須維持：'operation', 'properties', '歸屬分類', '專案', 'ToDo', '狀態', '負責人', '到期日', '建立時間', '關鍵字', 'text', 'weight'。
+6. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
+7. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
+
+# Field Mapping Logic (欄位對齊邏輯)
+- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、會議記錄、產品開發）。
+- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Q1 產品發布計劃）。
+- **ToDo (String)**: 包含具體的行動項目及必要背景。例如：「準備 Q1 產品發布簡報，需包含市場分析和競品比較」而非僅「準備簡報」。
+- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。如果提到「已完成」或「進行中」則相應設定。
+- **負責人 (Person)**: 提取提到的個人或團隊（例：凱衛、產品團隊、行銷部門）。
+- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。若提到「下週」等相對時間，請根據當前時間推算。
+- **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
+- **關鍵字 (Array of Objects)**: 提取 3-5 個「翻譯後」的核心關鍵字，並賦予 1-10 的權重（10 為最核心）。格式：[{"text": "關鍵字", "weight": 5}]。
+
+# Extraction Guidelines
+- 包含所有明確的行動項目（Action Items）
+- 提取重要的決策點和結論
+- 記錄需要跟進的討論主題
+- 識別風險、問題或待解決事項
+- 不要遺漏任何具體的日期、人名或專案名稱
+
+# JSON Output Structure
+[
+  {
+    "operation": "CREATE",
+    "properties": {
+      "歸屬分類": ["String"],
+      "專案": ["String"],
+      "ToDo": "String (詳細的行動項目描述)",
+      "狀態": "未開始" | "進行中" | "完成",
+      "負責人": "String",
+      "到期日": "YYYY-MM-DD",
+      "建立時間": "YYYY-MM-DD HH:mm:ss",
+      "關鍵字": [{"text": "String", "weight": Number}]
+    }
+  }
+]`;
+}
+
+/**
  * Call AI model to analyze text and extract key points
  * @param {string} text - Text to analyze
  * @returns {Promise<Array>} Array of key points
@@ -73,7 +133,7 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
             if (targetModel === 'default' || targetModel === 'undefined' || targetModel.includes('模拟') || !targetModel.startsWith('gemini')) {
                 targetModel = modelVersion;
             }
-            
+
             // Pass agentLabel to determine if we should use structured output
             return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
         } else if (model.provider === 'openai') {
@@ -166,52 +226,9 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
     let userPrompt = text;
 
     if (useStructuredOutput) {
-        // System Instructions for Notion data structuring (only for AutoScan Agent)
-        systemInstruction = `# Role
-你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容或文件」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
-
-# Constraints (核心約束)
-1. **完整提取**：請仔細閱讀文件，提取所有重要的行動項目、討論重點、決策和待辦事項。目標是提取 5-20 個項目，如果內容豐富可以超過 20 個。
-2. **禁止堆疊**：每個項目應該是獨立的待辦事項或重點，不要將所有資訊塞入單一項目。
-3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-4. **詳細描述**：ToDo 欄位應包含具體的行動項目及必要的背景說明，不要過度精簡。
-5. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
-6. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
-7. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
-
-# Field Mapping Logic (欄位對齊邏輯)
-- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、會議記錄、產品開發）。
-- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Q1 產品發布計劃）。
-- **ToDo (String)**: 包含具體的行動項目及必要背景。例如：「準備 Q1 產品發布簡報，需包含市場分析和競品比較」而非僅「準備簡報」。
-- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。如果提到「已完成」或「進行中」則相應設定。
-- **負責人 (Person)**: 提取提到的個人或團隊（例：凱衛、產品團隊、行銷部門）。
-- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。若提到「下週」等相對時間，請根據當前時間推算。
-- **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
-- **關鍵字 (Array of Objects)**: 提取 3-5 個「翻譯後」的核心關鍵字，並賦予 1-10 的權重（10 為最核心）。格式：[{"text": "關鍵字", "weight": 5}]。
-
-# Extraction Guidelines
-- 包含所有明確的行動項目（Action Items）
-- 提取重要的決策點和結論
-- 記錄需要跟進的討論主題
-- 識別風險、問題或待解決事項
-- 不要遺漏任何具體的日期、人名或專案名稱
-
-# JSON Output Structure
-[
-  {
-    "operation": "CREATE",
-    "properties": {
-      "歸屬分類": ["String"],
-      "專案": ["String"],
-      "ToDo": "String (詳細的行動項目描述)",
-      "狀態": "未開始" | "進行中" | "完成",
-      "負責人": "String",
-      "到期日": "YYYY-MM-DD",
-      "建立時間": "YYYY-MM-DD HH:mm:ss",
-      "關鍵字": [{"text": "String", "weight": Number}]
-    }
-  }
-]`;
+        systemInstruction = getSystemInstruction(targetLanguage);
+        userPrompt = `TASK: ANALYZE AND TRANSLATE TO [${targetLanguage}].
+Structure the following text. IMPORTANT: Translate all content values into [${targetLanguage}], but KEEP ALL JSON KEYS exactly as defined. Content:\n\n${text}`;
         console.log('[Gemini API] Using structured output mode for AutoScan Agent');
     } else {
         console.log('[Gemini API] Using simple prompt mode');
@@ -222,7 +239,7 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
     const requestBody = {
         contents: [{
             parts: [{
-                text: text
+                text: userPrompt
             }]
         }]
     };
@@ -241,7 +258,13 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({
+            ...requestBody,
+            generationConfig: {
+                maxOutputTokens: 8192,
+                temperature: 0.7
+            }
+        })
     });
 
     if (!response.ok) {
@@ -286,53 +309,7 @@ async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', target
     let messages = [];
 
     if (useStructuredOutput) {
-        // System Instructions for Notion data structuring (only for AutoScan Agent)
-        const systemInstruction = `# Role
-你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容或文件」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
-
-# Constraints (核心約束)
-1. **完整提取**：請仔細閱讀文件，提取所有重要的行動項目、討論重點、決策和待辦事項。目標是提取 5-20 個項目，如果內容豐富可以超過 20 個。
-2. **禁止堆疊**：每個項目應該是獨立的待辦事項或重點，不要將所有資訊塞入單一項目。
-3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-4. **詳細描述**：ToDo 欄位應包含具體的行動項目及必要的背景說明，不要過度精簡。
-5. **翻譯與繁體化**：所有輸出必須為 [${targetLanguage}]。
-6. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
-7. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
-
-# Field Mapping Logic (欄位對齊邏輯)
-- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、會議記錄、產品開發）。
-- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Q1 產品發布計劃）。
-- **ToDo (String)**: 包含具體的行動項目及必要背景。例如：「準備 Q1 產品發布簡報，需包含市場分析和競品比較」而非僅「準備簡報」。
-- **狀態 (Status)**: 根據內容判定，預設為 "未開始"。如果提到「已完成」或「進行中」則相應設定。
-- **負責人 (Person)**: 提取提到的個人或團隊（例：凱衛、產品團隊、行銷部門）。
-- **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。若提到「4月」，請根據當前年份輸出 YYYY-04-01。若提到「下週」等相對時間，請根據當前時間推算。
-- **建立時間 (DateTime)**: 使用當前時間 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
-- **關鍵字 (Array of Objects)**: 提取 3-5 個「翻譯後」的核心關鍵字，並賦予 1-10 的權重（10 為最核心）。格式：[{"text": "關鍵字", "weight": 5}]。
-
-# Extraction Guidelines
-- 包含所有明確的行動項目（Action Items）
-- 提取重要的決策點和結論
-- 記錄需要跟進的討論主題
-- 識別風險、問題或待解決事項
-- 不要遺漏任何具體的日期、人名或專案名稱
-
-# JSON Output Structure
-[
-  {
-    "operation": "CREATE",
-    "properties": {
-      "歸屬分類": ["String"],
-      "專案": ["String"],
-      "ToDo": "String (詳細的行動項目描述)",
-      "狀態": "未開始" | "進行中" | "完成",
-      "負責人": "String",
-      "到期日": "YYYY-MM-DD",
-      "建立時間": "YYYY-MM-DD HH:mm:ss",
-      "關鍵字": [{"text": "String", "weight": Number}]
-    }
-  }
-]`;
-
+        const systemInstruction = getSystemInstruction(targetLanguage);
         console.log('[OpenAI API] Using structured output mode for AutoScan Agent');
 
         messages = [
@@ -342,7 +319,7 @@ async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', target
             },
             {
                 role: 'user',
-                content: text
+                content: `Please analyze and structure the following text. IMPORTANT: Translate all content values into [${targetLanguage}], but KEEP ALL JSON KEYS exactly as defined. Content:\n\n${text}`
             }
         ];
     } else {
@@ -364,7 +341,7 @@ async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', target
             model: modelVersion,
             messages: messages,
             temperature: 0.7,
-            max_tokens: 2048
+            max_tokens: 8192
         })
     });
 
@@ -391,38 +368,67 @@ async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', target
  */
 function parseStructuredOutput(text) {
     try {
-        // Remove markdown code block tags if present (more robust version)
         let cleanedText = text.trim();
 
-        // Remove markdown code blocks (```json or ```)
-        cleanedText = cleanedText.replace(/^```(?:json)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '');
-
-        // Trim again after removing code blocks
-        cleanedText = cleanedText.trim();
-
-        // Additional cleanup: remove any leading/trailing whitespace
-        cleanedText = cleanedText.replace(/^\s+|\s+$/g, '');
-
-        console.log('[AI API] Attempting to parse JSON:', cleanedText.substring(0, 100) + '...');
-
-        // Try to parse as JSON
-        const jsonData = JSON.parse(cleanedText);
-
-        // Validate it's an array
-        if (Array.isArray(jsonData) && jsonData.length > 0) {
-            console.log('[AI API] Successfully parsed structured JSON output with', jsonData.length, 'items');
-            return jsonData;
+        // Step 1: Extract anything between [ and ] or from [ to end if missing closing bracket
+        const startIndex = cleanedText.indexOf('[');
+        if (startIndex !== -1) {
+            // Find the last possible closing bracket or take the rest of the string
+            const lastEndIndex = cleanedText.lastIndexOf(']');
+            if (lastEndIndex > startIndex) {
+                cleanedText = cleanedText.substring(startIndex, lastEndIndex + 1);
+            } else {
+                cleanedText = cleanedText.substring(startIndex);
+            }
         }
 
-        // If not valid array, fall back to simple parsing
-        console.warn('[AI API] JSON is not an array or is empty, falling back to simple parsing');
-        console.warn('[AI API] Parsed data type:', typeof jsonData, 'Array:', Array.isArray(jsonData));
-        return parseKeyPoints(text);
+        // Strip trailing markdown backticks if they leaked in
+        cleanedText = cleanedText.replace(/```\s*$/g, '').trim();
 
+        console.log('[AI API] Attempting to parse JSON (first 50 chars):', cleanedText.substring(0, 50));
+
+        try {
+            const jsonData = JSON.parse(cleanedText);
+            if (Array.isArray(jsonData) && jsonData.length > 0) return jsonData;
+        } catch (initialError) {
+            console.warn('[AI API] Initial JSON parse failed, attempting lazy recovery...');
+
+            // Step 2: Lazy structure recovery for truncated JSON (starts with [ but incomplete)
+            if (cleanedText.startsWith('[')) {
+                const lastBrace = cleanedText.lastIndexOf('}');
+                if (lastBrace !== -1) {
+                    try {
+                        const repairedText = cleanedText.substring(0, lastBrace + 1) + ']';
+                        const jsonData = JSON.parse(repairedText);
+                        if (Array.isArray(jsonData)) {
+                            console.log('[AI API] Successfully recovered truncated JSON');
+                            return jsonData;
+                        }
+                    } catch (repairError) { /* ignore and move to next recovery */ }
+                }
+            }
+            throw initialError;
+        }
+
+        return parseKeyPoints(text);
     } catch (error) {
-        // If JSON parsing fails, fall back to simple key points parsing
         console.error('[AI API] Failed to parse as JSON:', error.message);
-        console.error('[AI API] Failed text (first 200 chars):', text.substring(0, 200));
+        console.error('[AI API] Raw text length:', text.length);
+
+        // Deep recovery: Find individual CREATE objects via regex if the array is unsalvageable
+        try {
+            const matches = text.match(/\{"operation":\s*"CREATE"[\s\S]*?\}/g);
+            if (matches && matches.length > 0) {
+                console.log(`[AI API] Regex-based recovery found ${matches.length} objects`);
+                const keyPoints = matches.map(m => {
+                    try { return JSON.parse(m); } catch (e) { return null; }
+                }).filter(p => p !== null);
+                if (keyPoints.length > 0) return keyPoints;
+            }
+        } catch (deepError) {
+            console.error('[AI API] Deep recovery failed');
+        }
+
         return parseKeyPoints(text);
     }
 }
@@ -437,7 +443,18 @@ function parseKeyPoints(text) {
     const lines = text
         .split('\n')
         .map(line => line.trim())
-        .filter(line => line.length > 0);
+        .filter(line => line.length > 0)
+        // Filter out JSON markers and Markdown code blocks to prevent UI noise
+        .filter(line => {
+            const noisePatterns = [
+                /^```/,         // Markdown start/end
+                /^\[\s*$/,      // Lone opening bracket
+                /^\]\s*,?$/,    // Lone closing bracket
+                /^\{\s*$/,      // Lone opening brace
+                /^\}\s*,?$/     // Lone closing brace
+            ];
+            return !noisePatterns.some(p => p.test(line));
+        });
 
     // Remove bullet points, numbers, and other markers
     const keyPoints = lines.map(line => {
@@ -445,8 +462,10 @@ function parseKeyPoints(text) {
             .replace(/^[-*•]\s*/, '')  // Remove bullet points
             .replace(/^\d+[\.)]\s*/, '') // Remove numbers
             .replace(/^[一二三四五六七八九十]+[、.]\s*/, '') // Remove Chinese numbers
+            .replace(/"ToDo":\s*"/, '') // Remove ToDo field key if leaked
+            .replace(/"$/, '')          // Remove trailing quote if leaked
             .trim();
-    }).filter(point => point.length > 0);
+    }).filter(point => point.length > 0 && point !== 'json' && point !== 'properties');
 
     return keyPoints;
 }
@@ -752,3 +771,13 @@ async function callOpenAIAssistant(text, assistantId, apiKey, targetLanguage = '
         throw error;
     }
 }
+// Export functions to global window for accessibility between files
+window.getSystemInstruction = getSystemInstruction;
+window.callAIModel = callAIModel;
+window.callGeminiAPI = callGeminiAPI;
+window.callOpenAIAPI = callOpenAIAPI;
+window.parseStructuredOutput = parseStructuredOutput;
+window.parseKeyPoints = parseKeyPoints;
+window.getLanguageName = getLanguageName;
+window.displayKeyPoints = displayKeyPoints;
+window.showStatusMessage = showStatusMessage;

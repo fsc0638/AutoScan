@@ -5,7 +5,7 @@
 .result-tabs {
     display: flex;
     gap: 12px;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: 0;
 }
 
 .result-tab-btn {

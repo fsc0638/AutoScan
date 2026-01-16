@@ -60,13 +60,28 @@
 
 body {
     font-family: 'Inter', 'PingFang TC', -apple-system, sans-serif;
-    background-color: var(--bg-secondary);
-    /* Balanced light gray (#F9FAFB) */
     color: var(--text-primary);
     line-height: 1.5;
     min-height: 100vh;
     padding: var(--spacing-xl) 0;
     margin: 0;
+    position: relative;
+    background-color: var(--bg-secondary);
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: url('Gemini_Generated_Image_s5b9ufs5b9ufs5b9.png') no-repeat center center;
+    background-size: cover;
+    opacity: 0.3;
+    /* 30% 透明度 */
+    z-index: -1;
+    /* 確保在內容下方 */
 }
 
 .container {
@@ -207,6 +222,10 @@ body {
     font-size: 0.875rem;
 }
 
+#fileInput {
+    display: none;
+}
+
 .text-input-zone textarea {
     width: 100%;
     border: 1px solid var(--border-color);
@@ -309,11 +328,15 @@ body {
 #uploadToNotion {
     background-color: var(--brand-orange);
     color: var(--text-white);
+    padding: 10px 20px;
+    /* Match .result-tab-btn */
+    font-size: 0.95rem;
+    /* Match .result-tab-btn */
+    gap: 10px;
 }
 
 #uploadToNotion:hover {
     background-color: var(--brand-orange-hover);
-    transform: translateY(-2px);
     box-shadow: var(--shadow-md);
 }
 
@@ -410,17 +433,20 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
 }
 
 /* Right-align rocket emoji field icon */
 .field-group .field-icon {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: center;
     min-width: 1.5rem;
 }
+
 /* Right-align text in the rocket/project field */
 .edit-field.project {
-    text-align: right;
+    text-align: left;
     font-weight: 600;
 }
