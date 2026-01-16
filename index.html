@@ -1,4 +1,8 @@
 ﻿<!DOCTYPE html>
+<!-- 
+  LOCKED AREA: CORE UPLOAD & ANALYSIS UI
+  Do not modify the input sections or core structure to maintain consistency with the master branch.
+-->
 <html lang="zh-TW">
 
 <head>
@@ -6,12 +10,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="文件重點分析系統 - 支援 TXT、Word、PDF 文件上傳，使用 AI 智能提取重點並同步至 Notion">
   <title>文件重點分析系統 | AutoScan</title>
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="fullscreen.css">
+  <link rel="stylesheet" href="theme-dashboard.css">
   <!-- JSZip for Word document processing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <!-- PDF.js for PDF processing -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Chart.js for data visualization -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Plugin for showing labels/percentages on charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <!-- Word Cloud library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/wordcloud2.js/1.2.2/wordcloud2.min.js"></script>
+  <link rel="stylesheet" href="charts.css">
 </head>
 
 <body>
@@ -97,18 +107,9 @@
           </select>
         </div>
 
-        <!-- Agent Toggle -->
-        <div class="selector-group toggle-group">
-          <label for="useAgentToggle">調用 Agent</label>
-          <label class="switch">
-            <input type="checkbox" id="useAgentToggle">
-            <span class="slider round"></span>
-          </label>
-        </div>
-
         <!-- Agent Selection -->
         <div class="selector-group">
-          <label for="modelAgent" id="modelLabel">Agent</label>
+          <label for="modelAgent">Agent</label>
           <select id="modelAgent" class="model-select">
             <!-- Options will be populated by JavaScript based on provider -->
           </select>
@@ -125,21 +126,44 @@
       <div class="status-message" id="statusMessage"></div>
     </div>
 
-    <!-- Key Points Section -->
-    <div class="card">
+    <!-- Results Section (Tabs for Key Points & Charts) -->
+    <div class="card result-card">
       <div class="card-header">
-        <h2 class="card-title">重點節錄</h2>
-        <div class="button-group">
+        <div class="result-tabs">
+          <button class="result-tab-btn active" data-result-tab="keypoints">
+            <span>📝 重點節錄</span>
+          </button>
+          <button class="result-tab-btn" data-result-tab="charts">
+            <span>📊 數據分析</span>
+          </button>
           <button class="btn btn-notion" id="uploadToNotion" style="display: none;">
             <span>📤 上傳至 Notion</span>
           </button>
-          <button class="btn btn-copy" id="copyKeyPoints" style="display: none;">
-            <span>📋 複製重點</span>
-          </button>
         </div>
       </div>
-      <div id="keyPointsContainer">
-        <div class="empty-state">尚未分析，請先上傳文件或貼上逐字稿</div>
+
+      <!-- Key Points Panel -->
+      <div class="result-panel active" id="keypointsPanel">
+        <div id="keyPointsContainer">
+          <div class="empty-state">尚未分析，請先上傳文件或貼上逐字稿</div>
+        </div>
+      </div>
+
+      <!-- Charts Panel -->
+      <div class="result-panel" id="chartsPanel">
+        <div id="chartsContainer" class="charts-grid">
+          <!-- Charts will be injected here -->
+        </div>
+
+        <!-- New Keyword specific section -->
+        <div class="keyword-viz-container">
+          <div class="chart-wrapper full-width">
+            <h3>☁️ 關鍵字文字雲</h3>
+            <div class="word-cloud-container">
+              <canvas id="wordCloudCanvas"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -149,6 +173,7 @@
   <script src="model-selector.js"></script>
   <script src="vertex-agent-api.js"></script>
   <script src="ai-api.js"></script>
+  <script src="charts.js"></script>
   <script src="app.js"></script>
 </body>
 

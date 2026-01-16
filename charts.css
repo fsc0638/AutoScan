@@ -1,0 +1,142 @@
+/**
+ * AutoScan - Charting Styles (Variation 5 Light Theme)
+ */
+
+.result-tabs {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 0;
+}
+
+.result-tab-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: var(--transition-normal);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.result-tab-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--brand-blue);
+    color: var(--brand-blue);
+}
+
+.result-tab-btn.active {
+    background: var(--brand-blue);
+    color: var(--text-white);
+    border-color: var(--brand-blue);
+    box-shadow: var(--shadow-md);
+}
+
+.result-panel {
+    display: none;
+    animation: fadeIn var(--transition-normal);
+}
+
+.result-panel.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: var(--spacing-lg);
+    padding: var(--spacing-md) 0;
+    min-height: 450px;
+}
+
+.chart-wrapper {
+    background: var(--bg-primary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    border: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 400px;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-normal);
+}
+
+.chart-wrapper:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+}
+
+.chart-wrapper h3 {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-lg);
+    align-self: flex-start;
+}
+
+.canvas-container {
+    width: 100%;
+    height: 300px;
+    position: relative;
+    display: flex;
+    justify-content: center;
+}
+
+.chart-wrapper.full-width {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+.word-cloud-container {
+    width: 100%;
+    height: 400px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+}
+
+canvas#wordCloudCanvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.keyword-viz-container {
+    margin-top: var(--spacing-xl);
+}
+
+/* Custom scrollbar for multi-column grid */
+#chartsContainer::-webkit-scrollbar {
+    width: 8px;
+}
+
+#chartsContainer::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+#chartsContainer::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 10px;
+}
+
+#chartsContainer::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
