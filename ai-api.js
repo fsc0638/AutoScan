@@ -1,38 +1,70 @@
 // ==========================================
-// AI Model API Integration
+// AI Model API Integration - COMPATIBILITY LAYER
 // ==========================================
+// This file now serves as a compatibility wrapper for the new LLM Core module
+// Maintains backward compatibility with existing AutoScan code
+// 
+// ⚠️  NEW PROJECTS: Use llm-core.js directly instead of this file
+// 📌 This wrapper will be deprecated in future versions
+
+console.log('⚠️  ai-api.js loaded as compatibility layer. Consider migrating to llm-core.js');
 
 /**
  * Call AI model to analyze text and extract key points
  * @param {string} text - Text to analyze
  * @param {string} targetLanguage - Target output language
  * @returns {Promise<Array>} Array of key points
+ * 
+ * @deprecated Use window.llmCore.call() instead
  */
 async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
-    const model = getSelectedModel();
+    // Get model configuration from the old model selector if it exists
+    // Otherwise use LLM UI Component
+    let model;
+
+    if (typeof getSelectedModel === 'function') {
+        // Old model selector still exists
+        model = getSelectedModel();
+    } else if (window.llmUI) {
+        // Use new LLM UI Component
+        model = window.llmUI.getSelection();
+        model = {
+            provider: model.provider,
+            agent: model.model,
+            agentLabel: model.modelName,
+            useAgent: model.useAgent
+        };
+    } else {
+        // Fallback to default
+        model = {
+            provider: 'gemini',
+            agent: 'gemini-2.0-flash-exp',
+            agentLabel: 'Gemini 2.0 Flash',
+            useAgent: false
+        };
+    }
+
     const providerConfig = await getModelConfig(model.provider);
 
-    // Determine the API Key: Priority: Agent's specific key > Provider's global key
+    // Determine the API Key
     let apiKey = providerConfig?.apiKey;
-
-    // Standard API Key Logic
     if (!apiKey) {
         throw new Error(`未設定 ${model.provider} API 金鑰`);
     }
 
-    console.log(`Using ${model.agentLabel} (${model.agent}) for analysis...`);
-    console.log(`Agent Mode Enabled: ${model.useAgent}`);
+    console.log(`[AI API Wrapper] Using ${model.agentLabel} (${model.agent})`);
+    console.log(`[AI API Wrapper] Agent Mode: ${model.useAgent}`);
 
     // ==========================================
-    // 1. ROUTE TO VERTEX AI AGENT (If Toggle ON)
+    // ROUTE TO VERTEX AI AGENT (If Toggle ON)
     // ==========================================
     if (model.useAgent) {
         if (typeof window.callVertexAgent === 'function') {
-            console.log('[AI API] Routing to Vertex AI Agent...');
+            console.log('[AI API Wrapper] Routing to Vertex AI Agent...');
             try {
                 return await window.callVertexAgent(text);
             } catch (agentError) {
-                console.error('[AI API] Vertex Agent Error:', agentError);
+                console.error('[AI API Wrapper] Vertex Agent Error:', agentError);
                 throw agentError;
             }
         } else {
@@ -41,29 +73,58 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
     }
 
     // ==========================================
-    // 2. STANDARD AI MODEL ROUTING (Toggle OFF)
+    // STANDARD AI MODEL ROUTING (Using LLM Core)
     // ==========================================
-    const defaultVersions = {
-        gemini: 'gemini-2.0-flash-exp',
-        openai: 'gpt-4o'
-    };
+    if (!window.llmCore) {
+        console.error('[AI API Wrapper] LLM Core not available, falling back to direct API calls');
+        // Fallback to old implementation
+        const defaultVersions = {
+            gemini: 'gemini-2.0-flash-exp',
+            openai: 'gpt-4o'
+        };
 
-    const modelVersion = defaultVersions[model.provider];
+        const modelVersion = defaultVersions[model.provider];
 
-    try {
-        if (model.provider === 'gemini') {
-            let targetModel = model.agent;
-            if (targetModel === 'default' || !targetModel.startsWith('gemini')) {
-                targetModel = modelVersion;
+        try {
+            if (model.provider === 'gemini') {
+                let targetModel = model.agent;
+                if (targetModel === 'default' || !targetModel.startsWith('gemini')) {
+                    targetModel = modelVersion;
+                }
+                return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
+            } else if (model.provider === 'openai') {
+                return await callOpenAIAPI(text, modelVersion, apiKey, model.agentLabel, targetLanguage);
+            } else {
+                throw new Error('不支援的語言模型');
             }
-            return await callGeminiAPI(text, targetModel, apiKey, model.agentLabel, targetLanguage);
-        } else if (model.provider === 'openai') {
-            return await callOpenAIAPI(text, modelVersion, apiKey, model.agentLabel, targetLanguage);
-        } else {
-            throw new Error('不支援的語言模型');
+        } catch (error) {
+            console.error('AI Model API Error:', error);
+            throw error;
         }
+    }
+
+    // Use new LLM Core
+    try {
+        // ==========================================
+        // 重要：所有標準模型都使用 AutoScan 系統指令
+        // 不再根據 agentLabel 判斷
+        // ==========================================
+        const systemInstruction = getSystemInstruction(targetLanguage);
+
+        console.log('[AI API Wrapper] Using AutoScan system instruction for all standard models');
+
+        const result = await window.llmCore.call(text, {
+            provider: model.provider,
+            model: model.agent,
+            targetLanguage: targetLanguage,
+            systemInstruction: systemInstruction,  // 永遠使用
+            useAgent: false // Already handled above
+        });
+
+        // Parse - 永遠嘗試解析結構化輸出
+        return parseStructuredOutput(result.text);
     } catch (error) {
-        console.error('AI Model API Error:', error);
+        console.error('[AI API Wrapper] Error:', error);
         throw error;
     }
 }
@@ -90,32 +151,55 @@ async function getModelConfig(provider) {
 }
 
 /**
- * Get unified system instruction for AutoScan data structuring
+ * System instruction cache
  */
-function getSystemInstruction(targetLanguage = 'Traditional Chinese') {
-    return `# OUTPUT LANGUAGE (重要：輸出語言要求)
-- ALL output content values MUST be in [${targetLanguage}].
-- 如果輸入是英文而要求是繁體中文，請務必翻譯。
-- 如果輸入是中文而要求是 English，請務必翻譯。
+let systemInstructionCache = null;
 
-# Role
-你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容或文件」拆解為多個獨立維度的屬性，以對應 Notion 的資料庫欄位。
+/**
+ * Load system instruction from external file
+ */
+async function loadSystemInstruction() {
+    if (systemInstructionCache) {
+        return systemInstructionCache;
+    }
 
-# Constraints (核心約束)
-1. **完整提取**：請仔細閱讀文件，提取所有重要的行動項目、討論重點、決議和待辦事項。目標是提取 15-20 個項目，如果內容豐富可以超過 20 個。
-2. **禁止堆疊**：每個項目應該是獨立的待辦事項或重點，不要將所有資訊塞入單一項目。
-3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
-4. **詳細描述**：ToDo 欄位應包含具體的行動項目及必要的背景說明，20 到 50 字元，不要過度精簡。
-5. **語言與鍵值校準**：
-   - **翻譯要求**：所有欄位的「內容值（Value）」必須完全使用 [${targetLanguage}]。
-   - **鍵值固定**：**絕對嚴禁翻譯或更動 JSON 的鍵值（Key Name）**。鍵值必須維持：'operation', 'properties', '歸屬分類', '專案', 'ToDo', '狀態', '負責人', '到期日', '建立時間', '關鍵字', 'text', 'weight'。
-6. **關鍵字提取**：針對每項重點，額外提取 3-5 個相關「關鍵字」並翻譯為 [${targetLanguage}]。
-7. **輸出格式**：僅輸出純 JSON 陣列，不包含 Markdown 代碼塊標籤。
-`;
+    try {
+        const response = await fetch('system-instruction.txt');
+        if (!response.ok) {
+            throw new Error(`Failed to load system instruction: ${response.status}`);
+        }
+        systemInstructionCache = await response.text();
+        console.log('✅ System instruction loaded from file');
+        console.log(`📄 File size: ${systemInstructionCache.length} characters`);
+        console.log(`📝 First 200 chars: ${systemInstructionCache.substring(0, 200)}...`);
+        return systemInstructionCache;
+    } catch (error) {
+        console.error('❌ Failed to load system instruction file:', error);
+        // Fallback to minimal instruction if file load fails
+        const fallback = `You are an expert in structuring meeting content for Notion databases. 
+Extract key points and format as JSON array with fields: 歸屬分類, 專案, ToDo, 狀態, 負責人, 到期日, 建立時間, 關鍵字.
+Translate all content values to [{targetLanguage}].`;
+        console.warn('⚠️ Using fallback system instruction');
+        return fallback;
+    }
 }
 
 /**
- * Call Gemini API
+ * Get unified system instruction for AutoScan data structuring
+ * Now loads from external file
+ */
+async function getSystemInstruction(targetLanguage = 'Traditional Chinese') {
+    const template = await loadSystemInstruction();
+    const finalInstruction = template.replace(/{targetLanguage}/g, targetLanguage);
+    console.log(`🎯 System Instruction prepared for language: ${targetLanguage}`);
+    console.log(`📏 Final instruction length: ${finalInstruction.length} characters`);
+    console.log(`🔍 Contains "CRITICAL"? ${finalInstruction.includes('CRITICAL')}`);
+    console.log(`🔍 Contains "關鍵字"? ${finalInstruction.includes('關鍵字')}`);
+    return finalInstruction;
+}
+
+/**
+ * Call Gemini API (Legacy fallback)
  */
 async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLanguage = 'Traditional Chinese') {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -124,25 +208,17 @@ async function callGeminiAPI(text, modelId, apiKey, agentLabel = '', targetLangu
     const baseUrl = isLocalhost ? `/api/gemini/${apiVersion}/${modelPath}:generateContent` : `https://generativelanguage.googleapis.com/${apiVersion}/${modelPath}:generateContent`;
     const url = `${baseUrl}?key=${apiKey}`;
 
-    const useStructuredOutput = agentLabel.includes('AutoScan');
-    let systemInstruction = null;
-    let userPrompt = text;
-
-    if (useStructuredOutput) {
-        systemInstruction = getSystemInstruction(targetLanguage);
-        userPrompt = `TASK: ANALYZE AND TRANSLATE TO [${targetLanguage}].
+    // ==========================================
+    // 重要：所有模型都使用 AutoScan 系統指令
+    // ==========================================
+    const systemInstruction = await getSystemInstruction(targetLanguage);
+    const userPrompt = `TASK: ANALYZE AND TRANSLATE TO [${targetLanguage}].
 Structure the following text. IMPORTANT: Translate all content values into [${targetLanguage}], but KEEP ALL JSON KEYS exactly as defined. Content:\n\n${text}`;
-    } else {
-        userPrompt = `Please analyze the following text and provide key points. Ensure the output is in ${targetLanguage}.\n\n${text}`;
-    }
 
     const requestBody = {
-        contents: [{ parts: [{ text: userPrompt }] }]
+        contents: [{ parts: [{ text: userPrompt }] }],
+        system_instruction: { parts: [{ text: systemInstruction }] }
     };
-
-    if (systemInstruction) {
-        requestBody.system_instruction = { parts: [{ text: systemInstruction }] };
-    }
 
     const response = await fetch(url, {
         method: 'POST',
@@ -160,27 +236,25 @@ Structure the following text. IMPORTANT: Translate all content values into [${ta
 
     const data = await response.json();
     const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return useStructuredOutput ? parseStructuredOutput(generatedText) : parseKeyPoints(generatedText);
+
+    // 永遠嘗試解析結構化輸出
+    return parseStructuredOutput(generatedText);
 }
 
 /**
- * Call OpenAI API
+ * Call OpenAI API (Legacy fallback)
  */
 async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', targetLanguage = 'Traditional Chinese') {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const url = isLocalhost ? '/api/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
 
-    const useStructuredOutput = agentLabel.includes('AutoScan');
-    let messages = [];
-
-    if (useStructuredOutput) {
-        messages = [
-            { role: 'system', content: getSystemInstruction(targetLanguage) },
-            { role: 'user', content: `Please analyze and structure the following text. IMPORTANT: Translate all content values into [${targetLanguage}], but KEEP ALL JSON KEYS exactly as defined. Content:\n\n${text}` }
-        ];
-    } else {
-        messages = [{ role: 'user', content: `Analyze and extract key points. Output language: ${targetLanguage}.\n\n${text}` }];
-    }
+    // ==========================================
+    // 重要：所有模型都使用 AutoScan 系統指令
+    // ==========================================
+    const messages = [
+        { role: 'system', content: getSystemInstruction(targetLanguage) },
+        { role: 'user', content: `Please analyze and structure the following text. IMPORTANT: Translate all content values into [${targetLanguage}], but KEEP ALL JSON KEYS exactly as defined. Content:\n\n${text}` }
+    ];
 
     const response = await fetch(url, {
         method: 'POST',
@@ -195,7 +269,9 @@ async function callOpenAIAPI(text, modelVersion, apiKey, agentLabel = '', target
 
     const data = await response.json();
     const generatedText = data.choices[0].message.content;
-    return useStructuredOutput ? parseStructuredOutput(generatedText) : parseKeyPoints(generatedText);
+
+    // 永遠嘗試解析結構化輸出
+    return parseStructuredOutput(generatedText);
 }
 
 /**
@@ -250,7 +326,7 @@ function parseKeyPoints(text) {
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0)
         .filter(line => ![/^```/, /^\[\s*$/, /^\]\s*,?$/, /^\{\s*$/, /^\}\s*,?$/].some(p => p.test(line)));
 
-    return lines.map(line => line.replace(/^[-*?兡\s*/, '').replace(/^\d+[\.)]\s*/, '').trim())
+    return lines.map(line => line.replace(/^[-*•]\s*/, '').replace(/^\d+[\.)]\s*/, '').trim())
         .filter(point => point.length > 0 && point !== 'json' && point !== 'properties');
 }
 
@@ -274,12 +350,17 @@ function displayKeyPoints(keyPoints) {
     }
 
     currentKeyPoints = keyPoints;
-    const isStructured = keyPoints.length > 0 && typeof keyPoints[0] === 'object' && keyPoints[0].properties;
+
+    // Check if structured data - handle both {properties: {...}} and direct {...} formats
+    const isStructured = keyPoints.length > 0 && typeof keyPoints[0] === 'object' && (keyPoints[0].properties || keyPoints[0]['ToDo'] || keyPoints[0]['專案']);
+
+    console.log('[displayKeyPoints] isStructured:', isStructured);
+    console.log('[displayKeyPoints] First item:', keyPoints[0]);
 
     let html = '<div class="key-points-list">';
     if (isStructured) {
         html += keyPoints.map((item, index) => {
-            const props = item.properties;
+            const props = item.properties || item;
             return `
                 <div class="key-point-item structured" data-index="${index}">
                     <div class="key-point-number">${index + 1}</div>
@@ -288,13 +369,13 @@ function displayKeyPoints(keyPoints) {
                             <input type="text" class="edit-field title" value="${escapeHtmlAttribute(props.ToDo || '')}" data-field="ToDo">
                         </div>
                         <div class="meta-row">
-                            <div class="field-group"><span class="field-icon">📁</span><input type="text" class="edit-field tag" value="${escapeHtmlAttribute((props.歸屬分類 || []).join(', '))}" data-field="歸屬分類"></div>
-                            <div class="field-group"><span class="field-icon">�</span><input type="text" class="edit-field project" value="${escapeHtmlAttribute((props.專案 || []).join(', '))}" data-field="專案"></div>
+                            <div class="field-group"><span class="field-icon">📁</span><input type="text" class="edit-field tag" value="${escapeHtmlAttribute(Array.isArray(props.歸屬分類) ? props.歸屬分類.join(', ') : (props.歸屬分類 || ''))}" data-field="歸屬分類"></div>
+                            <div class="field-group"><span class="field-icon">📎</span><input type="text" class="edit-field project" value="${escapeHtmlAttribute(Array.isArray(props.專案) ? props.專案.join(', ') : (props.專案 || ''))}" data-field="專案"></div>
                         </div>
                         <div class="meta-row">
                             <div class="field-group"><span class="field-icon">👤</span><input type="text" class="edit-field person" value="${escapeHtmlAttribute(props.負責人 || '')}" data-field="負責人"></div>
                             <div class="field-group"><span class="field-icon">📅</span><input type="date" class="edit-field date" value="${escapeHtmlAttribute(props.到期日 || '')}" data-field="到期日"></div>
-                            <div class="field-group"><span class="field-icon">�</span>
+                            <div class="field-group"><span class="field-icon">⚙️</span>
                                 <select class="edit-field status" data-field="狀態">
                                     <option value="未開始" ${props.狀態 === '未開始' ? 'selected' : ''}>未開始</option>
                                     <option value="進行中" ${props.狀態 === '進行中' ? 'selected' : ''}>進行中</option>
@@ -338,3 +419,5 @@ window.parseKeyPoints = parseKeyPoints;
 window.getLanguageName = getLanguageName;
 window.displayKeyPoints = displayKeyPoints;
 window.showStatusMessage = showStatusMessage;
+
+console.log('✅ AI API compatibility layer loaded');

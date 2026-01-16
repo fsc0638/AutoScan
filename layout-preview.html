@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM UI 排版方案預覽</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #FAFAFA;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #003366;
+            margin-bottom: 3rem;
+            font-size: 2rem;
+        }
+
+        .layout-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .layout-title {
+            font-size: 1.5rem;
+            color: #003366;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .layout-desc {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 0.95rem;
+        }
+
+        /* Common Styles */
+        .llm-label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #003366;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        .llm-select {
+            padding: 0.75rem 1rem;
+            background: #2C3E50;
+            border: 1.5px solid rgba(100, 110, 140, 0.3);
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .llm-toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 30px;
+        }
+
+        .llm-toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .llm-toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(100, 110, 140, 0.3);
+            transition: 0.3s;
+            border-radius: 30px;
+            border: 1.5px solid rgba(100, 110, 140, 0.3);
+        }
+
+        .llm-toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 3px;
+            bottom: 2.5px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .llm-toggle-switch input:checked+.llm-toggle-slider {
+            background: #FF6600;
+            border-color: #FF6600;
+        }
+
+        .llm-toggle-switch input:checked+.llm-toggle-slider:before {
+            transform: translateX(30px);
+        }
+
+        .analyze-btn {
+            background: #003366;
+            color: white;
+            border: none;
+            padding: 1rem 3rem;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Layout 1: Horizontal */
+        .layout-1 {
+            background: #F3F4F6;
+            padding: 1.2rem;
+            border-radius: 12px;
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            margin-bottom: 1.5rem;
+        }
+
+        .layout-1 .selector-group {
+            flex: 1;
+        }
+
+        .layout-1 .toggle-group {
+            flex: 0 0 auto;
+            min-width: 140px;
+        }
+
+        .layout-1 .llm-select {
+            width: 100%;
+        }
+
+        /* Layout 2: Vertical */
+        .layout-2 {
+            background: #F3F4F6;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+        }
+
+        .layout-2 .selector-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .layout-2 .llm-select {
+            width: 100%;
+        }
+
+        .layout-2 .toggle-group {
+            text-align: center;
+        }
+
+        /* Layout 3: Cards */
+        .layout-3-container {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .layout-3-card {
+            flex: 1;
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .layout-3-card .llm-select {
+            width: 100%;
+        }
+
+        .layout-3-card .toggle-group {
+            text-align: center;
+        }
+
+        /* Layout 4: Compact */
+        .layout-4 {
+            background: #F3F4F6;
+            padding: 1rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+        }
+
+        .layout-4-row {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .layout-4-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .layout-4-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .layout-4 .llm-label {
+            margin: 0;
+            text-transform: none;
+        }
+
+        .layout-4 .llm-select {
+            min-width: 150px;
+        }
+
+        .layout-4 .analyze-btn {
+            padding: 0.5rem 2rem;
+            font-size: 1rem;
+        }
+
+        .button-center {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎨 LLM UI 排版方案預覽</h1>
+
+        <!-- Layout 1: Horizontal -->
+        <div class="layout-section">
+            <div class="layout-title">
+                <span>方案 1：水平一列式</span>
+                <span style="font-size: 0.9rem; color: #999;">(當前使用)</span>
+            </div>
+            <div class="layout-desc">
+                ✅ 適合桌面端、寬屏使用<br>
+                ✅ 視線流暢，快速掃描<br>
+                ⚠️ 需要較寬的屏幕空間
+            </div>
+
+            <div class="layout-1">
+                <div class="selector-group">
+                    <label class="llm-label">選擇語言模型</label>
+                    <select class="llm-select">
+                        <option>Gemini</option>
+                        <option>OpenAI</option>
+                    </select>
+                </div>
+
+                <div class="selector-group toggle-group">
+                    <label class="llm-label">調用 AGENT</label>
+                    <label class="llm-toggle-switch">
+                        <input type="checkbox">
+                        <span class="llm-toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="selector-group">
+                    <label class="llm-label">語言版本</label>
+                    <select class="llm-select">
+                        <option>Gemini 2.0 Flash (Exp)</option>
+                        <option>Gemini 1.5 Pro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="button-center">
+                <button class="analyze-btn">🔍 分析文字</button>
+            </div>
+        </div>
+
+        <!-- Layout 2: Vertical -->
+        <div class="layout-section">
+            <div class="layout-title">
+                <span>方案 2：垂直堆疊式</span>
+            </div>
+            <div class="layout-desc">
+                ✅ 適合行動裝置、小屏幕<br>
+                ✅ 閱讀順序清晰（上→下）<br>
+                ✅ 更易於觸控操作
+            </div>
+
+            <div class="layout-2">
+                <div class="selector-group">
+                    <label class="llm-label">選擇語言模型</label>
+                    <select class="llm-select">
+                        <option>Gemini</option>
+                        <option>OpenAI</option>
+                    </select>
+                </div>
+
+                <div class="selector-group toggle-group">
+                    <label class="llm-label">調用 AGENT</label>
+                    <label class="llm-toggle-switch">
+                        <input type="checkbox">
+                        <span class="llm-toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="selector-group">
+                    <label class="llm-label">語言版本</label>
+                    <select class="llm-select">
+                        <option>Gemini 2.0 Flash (Exp)</option>
+                        <option>Gemini 1.5 Pro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="button-center">
+                <button class="analyze-btn">🔍 分析文字</button>
+            </div>
+        </div>
+
+        <!-- Layout 3: Cards -->
+        <div class="layout-section">
+            <div class="layout-title">
+                <span>方案 3：分組卡片式</span>
+            </div>
+            <div class="layout-desc">
+                ✅ 視覺分隔明確<br>
+                ✅ 現代感強、專業<br>
+                ✅ 每個控制項有獨立空間
+            </div>
+
+            <div class="layout-3-container">
+                <div class="layout-3-card">
+                    <label class="llm-label">選擇語言模型</label>
+                    <select class="llm-select">
+                        <option>Gemini</option>
+                        <option>OpenAI</option>
+                    </select>
+                </div>
+
+                <div class="layout-3-card toggle-group">
+                    <label class="llm-label">調用 AGENT</label>
+                    <label class="llm-toggle-switch">
+                        <input type="checkbox">
+                        <span class="llm-toggle-slider"></span>
+                    </label>
+                </div>
+
+                <div class="layout-3-card">
+                    <label class="llm-label">語言版本</label>
+                    <select class="llm-select">
+                        <option>Gemini 2.0 Flash (Exp)</option>
+                        <option>Gemini 1.5 Pro</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="button-center">
+                <button class="analyze-btn">🔍 分析文字</button>
+            </div>
+        </div>
+
+        <!-- Layout 4: Compact -->
+        <div class="layout-section">
+            <div class="layout-title">
+                <span>方案 4：緊湊內聯式</span>
+            </div>
+            <div class="layout-desc">
+                ✅ 節省空間、高效<br>
+                ✅ 適合集成在其他界面中<br>
+                ✅ 高度緊湊
+            </div>
+
+            <div class="layout-4">
+                <div class="layout-4-row">
+                    <div class="layout-4-item">
+                        <label class="llm-label">模型:</label>
+                        <select class="llm-select">
+                            <option>Gemini</option>
+                            <option>OpenAI</option>
+                        </select>
+                    </div>
+                    <div class="layout-4-item">
+                        <label class="llm-label">Agent:</label>
+                        <label class="llm-toggle-switch">
+                            <input type="checkbox">
+                            <span class="llm-toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="layout-4-row">
+                    <div class="layout-4-item">
+                        <label class="llm-label">版本:</label>
+                        <select class="llm-select">
+                            <option>Gemini 2.0 Flash (Exp)</option>
+                            <option>Gemini 1.5 Pro</option>
+                        </select>
+                    </div>
+                    <button class="analyze-btn">🔍 分析</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Make toggles interactive
+        document.querySelectorAll('.llm-toggle-switch input').forEach(toggle => {
+            toggle.addEventListener('change', function () {
+                console.log('Toggle:', this.checked ? 'ON' : 'OFF');
+            });
+        });
+    </script>
+</body>
+
+</html>

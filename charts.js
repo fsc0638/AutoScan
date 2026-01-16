@@ -381,8 +381,12 @@ function renderCategoryChart(data, container) {
     const categoryCounts = {};
     data.forEach(item => {
         const categories = item.properties.歸屬分類 || [];
-        categories.forEach(c => {
-            categoryCounts[c] = (categoryCounts[c] || 0) + 1;
+        // Handle both string and array formats
+        const categoryArray = Array.isArray(categories) ? categories : [categories];
+        categoryArray.forEach(c => {
+            if (c && c.trim()) {  // Only count non-empty categories
+                categoryCounts[c] = (categoryCounts[c] || 0) + 1;
+            }
         });
     });
 

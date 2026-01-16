@@ -1,0 +1,56 @@
+/* Toggle Switch Styles */
+.llm-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 30px;
+    cursor: pointer;
+}
+
+.llm-toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.llm-toggle-slider {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(100, 110, 140, 0.3);
+    transition: all 0.3s ease;
+    border-radius: 30px;
+    border: 1.5px solid rgba(100, 110, 140, 0.3);
+}
+
+.llm-toggle-slider:before {
+    content: "";
+    position: absolute;
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 2.5px;
+    background-color: white;
+    transition: all 0.3s ease;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.llm-toggle-switch input:checked+.llm-toggle-slider {
+    background: linear-gradient(135deg, #0f4c81, #1e5a8e);
+    border-color: #1e5a8e;
+}
+
+.llm-toggle-switch input:checked+.llm-toggle-slider:before {
+    transform: translateX(30px);
+}
+
+.llm-toggle-switch:hover .llm-toggle-slider {
+    border-color: rgba(59, 130, 246, 0.5);
+}
+
+.llm-toggle-switch input:focus+.llm-toggle-slider {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}

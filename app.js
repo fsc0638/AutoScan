@@ -9,8 +9,11 @@
 // 1. State Management
 // ==========================================
 let transcript = '';
-let currentKeyPoints = [];
-let statusTimeout = null; // Fix for status message race conditions
+window.currentKeyPoints = [];
+let statusTimeout = null;
+
+// LLM UI Component instance
+let llmUI = null;
 
 // ==========================================
 // 2. DOM Elements
@@ -32,13 +35,8 @@ const elements = {
   manualTranscript: document.getElementById('manualTranscript'),
 
   // Controls
-  analyzeBtn: document.getElementById('analyzeBtn'),
   languageSelect: document.getElementById('languageSelect'),
   statusMessage: document.getElementById('statusMessage'),
-
-  // Models (handled in model-selector.js but we might need refs)
-  modelProvider: document.getElementById('modelProvider'),
-  modelVersion: document.getElementById('modelVersion'),
 
   // Results
   keyPointsContainer: document.getElementById('keyPointsContainer'),
@@ -52,7 +50,30 @@ const elements = {
 function init() {
   setupEventListeners();
   checkThirdPartyLibs();
+  initLLMComponent();
   console.log('🚀 AutoScan initialized');
+}
+
+/**
+ * Initialize LLM UI Component
+ */
+function initLLMComponent() {
+  // Wait for config to load
+  if (!window.LLMUIComponent) {
+    console.warn('⚠️ LLM UI Component not loaded yet, retrying...');
+    setTimeout(initLLMComponent, 500);
+    return;
+  }
+
+  llmUI = new LLMUIComponent({
+    containerId: 'llm-component-container',
+    configManager: window.configManager,
+    llmCore: window.llmCore,
+    onAnalyze: startAnalysis
+  });
+
+  llmUI.render();
+  console.log('✅ LLM UI Component initialized');
 }
 
 /**
@@ -121,11 +142,6 @@ function setupEventListeners() {
     });
   }
 
-  // Unified analyze button
-  if (elements.analyzeBtn) {
-    elements.analyzeBtn.addEventListener('click', startAnalysis);
-  }
-
   // Copy button
   if (elements.copyKeyPoints) {
     elements.copyKeyPoints.addEventListener('click', () => {
@@ -141,6 +157,18 @@ function setupEventListeners() {
   if (elements.uploadToNotion) {
     elements.uploadToNotion.addEventListener('click', handleUploadToNotion);
   }
+
+  // Result Tabs (Key Points / Charts)
+  document.querySelectorAll('.result-tab-btn').forEach(btn => {
+    btn.addEventListener('click', function () {
+      const tab = this.dataset.resultTab;
+      document.querySelectorAll('.result-tab-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      document.querySelectorAll('.result-panel').forEach(p => p.classList.remove('active'));
+      const target = document.getElementById(`${tab}Panel`);
+      if (target) target.classList.add('active');
+    });
+  });
 }
 
 // ==========================================
@@ -185,44 +213,113 @@ async function startAnalysis() {
     }
   }
 
+  // Get model selection from LLM UI Component
+  const selection = llmUI.getSelection();
+  console.log('[App] Model selection:', selection);
+
+  // Get selected language
+  const langCode = elements.languageSelect.value;
+  const targetLanguage = typeof window.getLanguageName === 'function'
+    ? window.getLanguageName(langCode)
+    : 'Traditional Chinese';
+
   // Start AI analysis
   try {
     showStatus('🚀 正在啟動 AI 進行分析...', 'info');
+    llmUI.updateButtonState('loading', '分析中...');
 
-    if (typeof window.callAIModel !== 'function') {
-      throw new Error('找不到 AI 模組 (ai-api.js)');
+    // ==========================================
+    // 重要：所有標準模型都使用 AutoScan 系統指令
+    // 模擬 Agent 的行為
+    // ==========================================
+    const systemInstruction = typeof window.getSystemInstruction === 'function'
+      ? await window.getSystemInstruction(targetLanguage)
+      : null;
+
+    console.log(`[App] Using AutoScan system instruction for ${selection.provider} - ${selection.model}`);
+
+    // 🌍 Add explicit translation reminder to user prompt
+    const translationReminder = `\n\n⚠️ CRITICAL REMINDER: Output language MUST be ${targetLanguage}. Translate ALL content values to ${targetLanguage}. Do NOT keep source language.`;
+    const textWithReminder = textToAnalyze + translationReminder;
+
+    // Call LLM Core
+    const result = await window.llmCore.call(textWithReminder, {
+      provider: selection.provider,
+      model: selection.model,
+      targetLanguage: targetLanguage,
+      systemInstruction: systemInstruction,  // 永遠使用 AutoScan 指令
+      useAgent: selection.useAgent  // 只有這個決定是否用 Vertex AI Agent
+    });
+
+    console.log('[App] LLM result:', result);
+
+    // Parse the result - 永遠嘗試解析結構化輸出
+    let keyPoints;
+    if (typeof window.parseStructuredOutput === 'function') {
+      keyPoints = window.parseStructuredOutput(result.text);
+      console.log('[App] Parsed keyPoints:', keyPoints);
+
+      // 🔧 Convert format if needed
+      if (typeof window.convertToPropertiesFormat === 'function') {
+        keyPoints = window.convertToPropertiesFormat(keyPoints);
+        console.log('[App] After format conversion:', keyPoints);
+      }
+
+      // Validate keyPoints structure
+      if (!Array.isArray(keyPoints)) {
+        console.warn('[App] parseStructuredOutput did not return array, falling back to parseKeyPoints');
+        keyPoints = null;
+      }
     }
 
-    // Get selected language
-    const langCode = elements.languageSelect.value;
-    const targetLanguage = typeof window.getLanguageName === 'function'
-      ? window.getLanguageName(langCode)
-      : 'Traditional Chinese (Taiwan)';
+    if (!keyPoints && typeof window.parseKeyPoints === 'function') {
+      keyPoints = window.parseKeyPoints(result.text);
+      console.log('[App] Fallback parsed keyPoints:', keyPoints);
+    }
 
-    console.log(`[App] Analyzing in language: ${targetLanguage} (${langCode})`);
+    if (!keyPoints || !Array.isArray(keyPoints)) {
+      // Fallback: split by lines
+      console.warn('[App] Using line-split fallback');
+      keyPoints = result.text.split('\n').filter(line => line.trim());
+    }
 
-    const keyPoints = await window.callAIModel(textToAnalyze, targetLanguage);
+    // Final validation
+    if (!keyPoints || keyPoints.length === 0) {
+      throw new Error('分析結果為空，請檢查輸入內容或重試');
+    }
 
-    if (keyPoints && keyPoints.length > 0) {
-      currentKeyPoints = keyPoints;
-      // Use display function from ai-api.js or implement here
-      if (typeof window.displayKeyPoints === 'function') {
-        window.displayKeyPoints(keyPoints);
-      } else {
-        renderKeyPoints(keyPoints);
+    console.log('[App] Final keyPoints to display:', keyPoints);
+    window.currentKeyPoints = keyPoints;
+
+    // Update UI
+    if (typeof window.displayKeyPoints === 'function') {
+      window.displayKeyPoints(keyPoints);
+    }
+
+    // Initialize Charts if data is available
+    if (typeof window.initCharts === 'function') {
+      try {
+        window.initCharts(keyPoints, textToAnalyze);
+      } catch (chartError) {
+        console.error('[App] Chart initialization error:', chartError);
+        // Don't fail the whole analysis if charts fail
       }
-      showStatus('✅ 分析完成！', 'success');
+    }
 
-      // Show Notion button if configured
-      if (configManager.isConfigured('notion')) {
-        elements.uploadToNotion.style.display = 'inline-flex';
-      }
-    } else {
-      showStatus('未能提取重點，請嘗試更換模型或增加文字量', 'error');
+    showStatus('✅ 分析完成！', 'success');
+    llmUI.updateButtonState('success', '分析完成');
+
+    // Show buttons
+    if (elements.copyKeyPoints) {
+      elements.copyKeyPoints.style.display = 'inline-flex';
+    }
+    if (configManager.isConfigured('notion')) {
+      elements.uploadToNotion.style.display = 'inline-flex';
     }
   } catch (error) {
     console.error('Analysis error:', error);
     showStatus(`❌ 出錯了: ${error.message}`, 'error');
+    llmUI.updateButtonState('error', '發生錯誤');
   }
 }
 
@@ -244,9 +341,11 @@ function handleFile(file) {
 
   // Clear previous transcript
   transcript = '';
-  elements.keyPointsContainer.innerHTML = '<div class="empty-state">檔案已載入，請點擊「分析文字」進行分析</div>';
-  elements.copyKeyPoints.style.display = 'none';
-  elements.uploadToNotion.style.display = 'none';
+  if (elements.keyPointsContainer) {
+    elements.keyPointsContainer.innerHTML = '<div class="empty-state">檔案已載入，請點擊「分析文字」進行分析</div>';
+  }
+  if (elements.copyKeyPoints) elements.copyKeyPoints.style.display = 'none';
+  if (elements.uploadToNotion) elements.uploadToNotion.style.display = 'none';
 
   // Process based on type
   if (file.type === 'text/plain' || file.name.endsWith('.txt')) {

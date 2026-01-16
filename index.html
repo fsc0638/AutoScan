@@ -96,32 +96,8 @@
         </div>
       </div>
 
-      <!-- Language Model Selection (moved before analyze button) -->
-      <div class="model-selector-container">
-        <!-- Model Provider Selection -->
-        <div class="selector-group">
-          <label for="modelProvider">選擇模型</label>
-          <select id="modelProvider" class="model-select">
-            <option value="gemini">Gemini</option>
-            <option value="openai">OpenAI</option>
-          </select>
-        </div>
-
-        <!-- Agent Selection -->
-        <div class="selector-group">
-          <label for="modelAgent">Agent</label>
-          <select id="modelAgent" class="model-select">
-            <!-- Options will be populated by JavaScript based on provider -->
-          </select>
-        </div>
-      </div>
-
-      <!-- Analyze Button -->
-      <div class="analyze-section">
-        <button class="btn" id="analyzeBtn">
-          <span>🔍 分析文字</span>
-        </button>
-      </div>
+      <!-- Language Model Selection - New LLM Component -->
+      <div id="llm-component-container"></div>
 
       <div class="status-message" id="statusMessage"></div>
     </div>
@@ -155,7 +131,7 @@
           <!-- Charts will be injected here -->
         </div>
 
-        <!-- New Keyword specific section -->
+        <!-- Keyword Word Cloud section -->
         <div class="keyword-viz-container">
           <div class="chart-wrapper full-width">
             <h3>☁️ 關鍵字文字雲</h3>
@@ -166,15 +142,24 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <script src="config.js"></script>
-  <script src="config-manager.js"></script>
-  <script src="model-selector.js"></script>
-  <script src="vertex-agent-api.js"></script>
-  <script src="ai-api.js"></script>
-  <script src="charts.js"></script>
-  <script src="app.js"></script>
+    <script src="config.js"></script>
+    <script src="config-manager.js"></script>
+
+    <!-- New LLM Modules -->
+    <script src="llm-core.js"></script>
+    <script src="llm-ui-component.js"></script>
+    <link rel="stylesheet" href="llm-ui-component.css">
+
+    <!-- Keep legacy modules for compatibility -->
+    <script src="vertex-agent-api.js"></script>
+    <script src="ai-api.js"></script>
+
+    <!-- Format converter for AI output -->
+    <script src="format-converter.js"></script>
+    <script src="charts.js"></script>
+    <script src="app.js"></script>
+  </div>
 </body>
 
 </html>
