@@ -69,6 +69,11 @@ class LLMUIComponent {
                         </select>
                     </div>
                     
+                    <button id="llm-update-schema-btn" class="llm-update-schema-btn-compact">
+                        <span class="llm-btn-icon">🔄</span>
+                        <span class="llm-btn-text">更新選單項目</span>
+                    </button>
+                    
                     <button id="llm-analyze-btn" class="llm-analyze-btn-compact">
                         <span class="llm-btn-icon">🔍</span>
                         <span class="llm-btn-text">分析文字</span>
@@ -83,6 +88,7 @@ class LLMUIComponent {
             agentSelect: document.getElementById('llm-agent-select'),
             agentLabel: document.getElementById('llm-agent-label'),
             useAgentToggle: document.getElementById('llm-use-agent-toggle'),
+            updateSchemaBtn: document.getElementById('llm-update-schema-btn'),
             analyzeBtn: document.getElementById('llm-analyze-btn')
         };
 
@@ -117,6 +123,13 @@ class LLMUIComponent {
             console.log('[LLM UI] Agent mode:', this.state.useAgent ? 'ON' : 'OFF');
             this.updateAgentList(); // Refresh list based on toggle
         });
+
+        // Update Schema button
+        if (this.onUpdateSchemaCallback) {
+            this.elements.updateSchemaBtn.addEventListener('click', () => {
+                this.onUpdateSchemaCallback();
+            });
+        }
 
         // Analyze button
         if (this.onAnalyzeCallback) {

@@ -502,7 +502,7 @@ app.post('/api/vertex-agent/query', async (req, res) => {
 
         // Extract text from Gemini response
         const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        
+
         console.log('[Server] Generated text preview:', generatedText.substring(0, 200));
 
         res.json({
@@ -531,6 +531,71 @@ app.get('/api/vertex-agent/health', async (req, res) => {
         res.json({ status: 'ok', message: 'Vertex AI Agent is available' });
     } catch (error) {
         res.status(503).json({ status: 'error', message: error.message });
+    }
+});
+
+/**
+ * Save Notion Schema to File
+ * POST /api/save-notion-schema
+ * Saves schema as txt file with JSON content, overwrites existing files with same DB ID
+ */
+app.post('/api/save-notion-schema', async (req, res) => {
+    const { databaseId, schemaData } = req.body;
+
+    if (!databaseId || !schemaData) {
+        return res.status(400).json({ message: 'Missing databaseId or schemaData' });
+    }
+
+    try {
+        // 取得 Database ID 後五碼
+        const dbIdSuffix = databaseId.slice(-5);
+
+        // 產生時間戳 yyyyMMddHHmmss
+        const now = new Date();
+        const timestamp = [
+            now.getFullYear(),
+            String(now.getMonth() + 1).padStart(2, '0'),
+            String(now.getDate()).padStart(2, '0'),
+            String(now.getHours()).padStart(2, '0'),
+            String(now.getMinutes()).padStart(2, '0'),
+            String(now.getSeconds()).padStart(2, '0')
+        ].join('');
+
+        // 檔名格式：Notion_schema_ID_[後五碼]_[時間戳].txt
+        const prefix = `Notion_schema_ID_${dbIdSuffix}_`;
+        const filename = `${prefix}${timestamp}.txt`;
+        const filepath = path.join(__dirname, filename);
+
+        console.log(`[Server] Saving Notion schema to: ${filename}`);
+
+        // 刪除舊的同 Database ID 檔案
+        const files = fs.readdirSync(__dirname);
+        const oldFiles = files.filter(f => f.startsWith(prefix) && f.endsWith('.txt'));
+
+        for (const oldFile of oldFiles) {
+            const oldPath = path.join(__dirname, oldFile);
+            fs.unlinkSync(oldPath);
+            console.log(`[Server] Deleted old schema file: ${oldFile}`);
+        }
+
+        // 寫入新檔案（JSON 格式）
+        const jsonContent = JSON.stringify(schemaData, null, 2);
+        fs.writeFileSync(filepath, jsonContent, 'utf8');
+
+        console.log(`[Server] ✅ Schema saved successfully: ${filename}`);
+        console.log(`[Server] File size: ${jsonContent.length} bytes`);
+
+        res.json({
+            success: true,
+            filename: filename,
+            path: filepath,
+            size: jsonContent.length,
+            timestamp: timestamp
+        });
+
+    } catch (error) {
+        console.error('[Server] Error saving schema file:', error);
+        res.status(500).json({ message: error.message });
     }
 });
 
