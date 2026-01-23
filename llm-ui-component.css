@@ -255,6 +255,7 @@
     color: rgb(0, 51, 102);
     margin: 0;
     white-space: nowrap;
+    min-width: 120px;
 }
 
 .llm-select-compact {
@@ -291,7 +292,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 2rem;
+    padding: 0.5rem 1.5rem;
     background: rgb(0, 51, 102);
     color: #ffffff;
     border: none;
@@ -302,6 +303,8 @@
     transition: all 0.3s ease;
     box-shadow: 0 4px 15px rgba(0, 51, 102, 0.4);
     margin-left: auto;
+    min-width: 180px;
+    justify-content: center;
 }
 
 .llm-analyze-btn-compact:hover {
@@ -323,6 +326,7 @@
 .llm-analyze-btn-compact.loading {
     background: rgba(74, 85, 104, 0.8);
 }
+
 /* Update Schema Button Styles */
 .llm-update-schema-btn-compact {
     display: inline-flex;
@@ -333,12 +337,14 @@
     color: #ffffff;
     border: none;
     border-radius: 50px;
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.3s ease;
     box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
-    margin-right: 0.75rem;
+    margin-left: auto;
+    min-width: 180px;
+    justify-content: center;
 }
 
 .llm-update-schema-btn-compact:hover {

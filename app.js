@@ -545,11 +545,12 @@ async function handleUpdateSchema() {
 
     const saveResult = await saveResponse.json();
 
-    // Success message matching the screenshot format
+    // Success message with structured format
     showStatus(
-      `✅ Schema 已儲存到檔案: ${saveResult.filename}\n` +
-      `📂 檔案路徑: ${saveResult.path}\n` +
-      `📊 檔案大小: ${saveResult.size} bytes`,
+      `✅ 儲存成功！\n` +
+      `檔案名稱：${saveResult.filename}\n` +
+      `檔案路徑：${saveResult.path}\n` +
+      `檔案大小：${saveResult.size} bytes`,
       'success'
     );
 
@@ -557,7 +558,11 @@ async function handleUpdateSchema() {
 
   } catch (error) {
     console.error('[App] Update Schema error:', error);
-    showStatus(`❌ 更新選單項目失敗: ${error.message}`, 'error');
+    showStatus(
+      `❌ 儲存失敗！\n` +
+      `錯誤訊息：${error.message}`,
+      'error'
+    );
   }
 }
 
@@ -834,18 +839,21 @@ function showStatus(message, type = 'info') {
     statusTimeout = null;
   }
 
-  elements.statusMessage.textContent = message;
+  // Use innerHTML to support line breaks and formatting
+  // Replace \n with <br> for proper line breaks
+  elements.statusMessage.innerHTML = message.replace(/\n/g, '<br>');
+
   // Use simple class name to match CSS (.status-message.success etc.)
   elements.statusMessage.className = `status-message ${type}`;
 
   // Ensure display is block/flex (CSS loading uses flex)
   elements.statusMessage.style.display = type === 'loading' ? 'flex' : 'block';
 
-  // Only auto-hide for success/error events, keep info/loading persistent
-  if (type === 'success' || type === 'error') {
+  // Auto-hide for all types except 'loading' after 30 seconds
+  if (type !== 'loading') {
     statusTimeout = setTimeout(() => {
       elements.statusMessage.style.display = 'none';
-    }, 5000);
+    }, 30000); // 30 seconds
   }
 }
 

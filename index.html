@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <!-- 
   LOCKED AREA: CORE UPLOAD & ANALYSIS UI
   Do not modify the input sections or core structure to maintain consistency with the master branch.
@@ -39,7 +39,20 @@
       <div class="card-header">
         <h2 class="card-title">📥 輸入方式</h2>
         <div class="language-selector">
-          <label for="languageSelect">分析語言:</label>
+          <label for="departmentSelect">選擇部門:</label>
+          <select id="departmentSelect">
+            <option value="">請選擇部門</option>
+            <option value="研發組">研發組</option>
+            <option value="業務組">業務組</option>
+            <option value="行銷組">行銷組</option>
+            <option value="管理組">管理組</option>
+          </select>
+
+          <select id="subDepartmentSelect" style="display: none; margin-left: 10px;">
+            <option value="">請選擇細項部門</option>
+          </select>
+
+          <label for="languageSelect" style="margin-left: 20px;">分析語言:</label>
           <select id="languageSelect">
             <option value="zh-TW">繁體中文</option>
             <option value="zh-CN">简体中文</option>
@@ -158,6 +171,11 @@
     <!-- Format converter for AI output -->
     <script src="format-converter.js"></script>
     <script src="charts.js"></script>
+
+    <!-- Department selection modules -->
+    <script src="departments-data.js"></script>
+    <script src="department-selector.js"></script>
+
     <script src="app.js"></script>
   </div>
 </body>

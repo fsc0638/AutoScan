@@ -267,9 +267,26 @@ body::before {
     letter-spacing: 0.05em;
 }
 
+/* Language Selector Container */
+.language-selector {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.language-selector label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
 .model-select,
-#languageSelect {
-    width: 100%;
+#languageSelect,
+#departmentSelect,
+#subDepartmentSelect {
+    width: auto;
+    min-width: 180px;
     padding: 0.75rem 1rem;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
@@ -283,7 +300,9 @@ body::before {
 }
 
 .model-select:hover,
-#languageSelect:hover {
+#languageSelect:hover,
+#departmentSelect:hover,
+#subDepartmentSelect:hover {
     border-color: var(--brand-blue);
     box-shadow: 0 0 0 3px rgba(0, 51, 102, 0.1);
 }
@@ -343,10 +362,12 @@ body::before {
 /* Status Message */
 .status-message {
     margin-top: var(--spacing-md);
-    padding: var(--spacing-sm);
+    padding: var(--spacing-md);
     border-radius: var(--radius-sm);
     font-weight: 600;
-    text-align: center;
+    text-align: left;
+    line-height: 1.8;
+    white-space: pre-line;
 }
 
 .status-message.info {

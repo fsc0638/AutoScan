@@ -22,6 +22,7 @@ class LLMUIComponent {
         this.configManager = options.configManager || window.configManager;
         this.llmCore = options.llmCore || window.llmCore;
         this.onAnalyzeCallback = options.onAnalyze;
+        this.onUpdateSchemaCallback = options.onUpdateSchema;
 
         this.elements = {};
         this.state = {
@@ -59,6 +60,11 @@ class LLMUIComponent {
                             <span class="llm-toggle-slider"></span>
                         </label>
                     </div>
+                    
+                    <button id="llm-update-schema-btn" class="llm-update-schema-btn-compact">
+                        <span class="llm-btn-icon">🔄</span>
+                        <span class="llm-btn-text">更新選單項目</span>
+                    </button>
                 </div>
                 
                 <div class="llm-compact-row">
@@ -68,11 +74,6 @@ class LLMUIComponent {
                             <!-- Options populated dynamically -->
                         </select>
                     </div>
-                    
-                    <button id="llm-update-schema-btn" class="llm-update-schema-btn-compact">
-                        <span class="llm-btn-icon">🔄</span>
-                        <span class="llm-btn-text">更新選單項目</span>
-                    </button>
                     
                     <button id="llm-analyze-btn" class="llm-analyze-btn-compact">
                         <span class="llm-btn-icon">🔍</span>

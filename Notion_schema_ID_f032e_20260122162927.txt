@@ -1,0 +1,86 @@
+{
+  "負責人": {
+    "type": "multi_select",
+    "options": []
+  },
+  "專案": {
+    "type": "multi_select",
+    "options": []
+  },
+  "到期日": {
+    "type": "date",
+    "options": null
+  },
+  "狀態": {
+    "type": "status",
+    "options": [
+      "未開始",
+      "進行中",
+      "完成"
+    ],
+    "groups": [
+      {
+        "name": "To-do",
+        "color": "gray",
+        "option_ids": [
+          "8e6f2bf4-8990-4da6-a25a-5823b0fc31fa"
+        ]
+      },
+      {
+        "name": "In progress",
+        "color": "blue",
+        "option_ids": [
+          "17465a5e-b462-443e-b6cb-d1c4c9396d70"
+        ]
+      },
+      {
+        "name": "Complete",
+        "color": "green",
+        "option_ids": [
+          "43bf30de-a990-4191-aa26-34c859c14421"
+        ]
+      }
+    ]
+  },
+  "責任部門": {
+    "type": "multi_select",
+    "options": []
+  },
+  "工時": {
+    "type": "number",
+    "options": null
+  },
+  "執行人": {
+    "type": "multi_select",
+    "options": []
+  },
+  "來源": {
+    "type": "multi_select",
+    "options": [
+      "商業模式",
+      "外部合作",
+      "法律法規",
+      "會議記錄",
+      "董事會顧問會議",
+      "董事長交辦",
+      "KWAY研發中心"
+    ]
+  },
+  "關鍵詞": {
+    "type": "multi_select",
+    "options": []
+  },
+  "階段里程碑": {
+    "type": "multi_select",
+    "options": []
+  },
+  "建立時間": {
+    "type": "created_time",
+    "options": null
+  },
+  "ToDo": {
+    "type": "title",
+    "options": null,
+    "isTitle": true
+  }
+}
