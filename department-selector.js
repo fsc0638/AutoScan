@@ -186,6 +186,7 @@ class DepartmentSelector {
 let departmentSelector;
 document.addEventListener('DOMContentLoaded', () => {
     departmentSelector = new DepartmentSelector();
+    window.departmentSelector = departmentSelector; // Make it global for app.js
     departmentSelector.init();
 });
 

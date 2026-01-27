@@ -25,8 +25,9 @@ window.initCharts = function (data, fullText = '') {
     }
 
     // 1. Core Logic: Structured Data Charts
-    // Data check: if data[0] is just a string, it's not structured
-    const isStructured = Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0].properties;
+    // Flexible data check: supports both nested properties (Agent mode) and flat properties (SkillsProcessor mode)
+    const firstItem = data[0] || {};
+    const isStructured = Array.isArray(data) && data.length > 0 && typeof firstItem === 'object' && (firstItem.properties || firstItem.ToDo || firstItem.關鍵詞);
 
     console.log('[Charts] Data structure check:', { isStructured });
 
@@ -38,36 +39,50 @@ window.initCharts = function (data, fullText = '') {
             console.error('[Charts] Error rendering structured charts:', e);
         }
 
-        // Check if AI provided translated keywords
+        // Check if AI provided keywords (Check both flat and nested structures)
         const aiKeywords = [];
         data.forEach(item => {
-            if (item.properties && item.properties.關鍵字 && Array.isArray(item.properties.關鍵字)) {
-                aiKeywords.push(...item.properties.關鍵字);
+            // Get raw keyword value (try flat then nested)
+            let rawK = item.關鍵詞 || (item.properties && item.properties.關鍵詞);
+
+            // Handle Notion-style multi_select object if present
+            if (rawK && typeof rawK === 'object' && !Array.isArray(rawK)) {
+                if (rawK.multi_select) rawK = rawK.multi_select;
+            }
+
+            if (Array.isArray(rawK)) {
+                aiKeywords.push(...rawK);
             }
         });
 
         if (aiKeywords.length > 0) {
-            console.log(`[Charts] Using ${aiKeywords.length} keywords from AI analysis`);
+            console.log(`[Charts] Found ${aiKeywords.length} AI keywords in structured data`);
             // Aggregate weights/frequencies of AI keywords
             const freqMap = {};
             aiKeywords.forEach(kw => {
-                // Handle both object {text, weight} and legacy string formats
-                const text = typeof kw === 'object' ? (kw.text || kw.關鍵字) : kw.trim();
-                const weight = typeof kw === 'object' ? (kw.weight || 1) : 1;
+                // Safely extract text from string or Notion object (name/text/content)
+                let text = '';
+                if (typeof kw === 'string') {
+                    text = kw.trim();
+                } else if (kw && typeof kw === 'object') {
+                    text = kw.name || kw.text || kw.content || kw.關鍵詞 || kw.關鍵字 || '';
+                }
 
-                if (text) {
-                    freqMap[text] = (freqMap[text] || 0) + weight;
+                if (text && text.length > 1) {
+                    freqMap[text] = (freqMap[text] || 0) + 1;
                 }
             });
-            const keywordList = Object.entries(freqMap).sort((a, b) => b[1] - a[1]);
+            const keywordList = Object.entries(freqMap)
+                .sort((a, b) => b[1] - a[1]);
+
             window.lastKeywords = keywordList;
-            console.log('[Charts] AI Keyword List (weighted):', keywordList);
+            console.log('[Charts] Using clean AI keywords for WordCloud:', keywordList);
             renderKeywordBarChart(keywordList, container);
             renderWordCloud(keywordList);
-            return; // Skip local extraction since we have AI keywords
+            return; // EXIT: Successfully used clean AI keywords
         }
     } else {
-        console.log('[Charts] Skipping structured charts (data is simple list)');
+        console.log('[Charts] Data is not structured (simple list), will use local extractor');
     }
 
     // 2. Keyword Analysis (Fallback to local extraction if no AI keywords)
@@ -134,9 +149,9 @@ function initResultTabs() {
 }
 
 /**
- * Optimized Keyword Extraction
+ * Optimized Keyword Extraction (Backup Algorithm)
  * Uses sentence-aware splitting, expanded stopwords, and linguistic filters.
- * Now supports structured data as a high-weight keyword source.
+ * Now expanded with many oral fillers as a safety net.
  */
 function extractKeywords(text, structuredData = []) {
     if (!text && (!structuredData || structuredData.length === 0)) return [];
@@ -148,8 +163,12 @@ function extractKeywords(text, structuredData = []) {
         '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '個', '隻', '張', '本', '關', '於', '到', '裡', '說', '講',
         '一個', '一些', '一下', '一次', '一種', '一直', '一些', '一點', '有些', '有些', '雖然', '但是', '如果', '所以', '因為', '甚至',
         '你', '我', '他', '她', '它', '我們', '你們', '他們', '您的', '我的', '他的', '這是一個',
+        // High-Noisy Fillers (Reported by User)
+        '然後', '比較', '覺得', '那個', '就是', '出來', '這樣子', '對對對', '時候', '沒有', '問題', '大家', '東西', '內容', '活動',
+        '進行', '目前', '現在', '未來', '開始', '其實', '大概', '稍微', '有點', '非常', '特別', '一直', '已經', '還是', '看到',
+        '看到', '知道', '感覺', '部分', '這樣', '那樣', '所謂', '所謂', '其實', '甚至', '結果', '所以', '因為', '如果', '的話',
         // Common Reporting/Filler Verbs (Fragments)
-        '說', '講', '看', '做', '想', '要', '會', '能', '可以', '可能', '應該', '必須', '需要', '進行', '目前', '現在',
+        '說', '講', '看', '做', '想', '要', '會', '能', '可以', '可能', '應該', '必須', '需要',
         // English Stopwords
         'the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'in', 'on', 'at', 'by', 'of', 'for', 'with', 'this', 'that', 'these', 'those', 'it', 'its', 'they', 'them', 'their', 'our', 'your', 'my', 'his', 'her', 'us', 'we', 'you', 'me', 'can', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don', 'should', 'now'
     ]);
@@ -325,7 +344,12 @@ function renderKeywordBarChart(keywords, container) {
 function renderStatusChart(data, container) {
     const statusCounts = {};
     data.forEach(item => {
-        const status = item.properties.狀態 || '未開始';
+        // Support both item.狀態 and item.properties.狀態, and unpack if object
+        let rawStatus = item.狀態 || (item.properties && item.properties.狀態) || '未開始';
+        let status = rawStatus;
+        if (rawStatus && typeof rawStatus === 'object') {
+            status = rawStatus.name || rawStatus.text || (rawStatus.select && rawStatus.select.name) || '未開始';
+        }
         statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
 
@@ -380,12 +404,22 @@ function renderStatusChart(data, container) {
 function renderCategoryChart(data, container) {
     const categoryCounts = {};
     data.forEach(item => {
-        const categories = item.properties.歸屬分類 || [];
+        // Support item.歸屬分類, item.來源, or their nested versions
+        const categories = item.歸屬分類 || (item.properties && item.properties.歸屬分類) ||
+            item.來源 || (item.properties && item.properties.來源) || [];
+
         // Handle both string and array formats
         const categoryArray = Array.isArray(categories) ? categories : [categories];
         categoryArray.forEach(c => {
-            if (c && c.trim()) {  // Only count non-empty categories
-                categoryCounts[c] = (categoryCounts[c] || 0) + 1;
+            // Unpack Notion-style object if needed
+            let val = c;
+            if (c && typeof c === 'object') {
+                val = c.name || c.text || c.content || '';
+            }
+
+            if (val && typeof val === 'string' && val.trim()) {
+                const trimmed = val.trim();
+                categoryCounts[trimmed] = (categoryCounts[trimmed] || 0) + 1;
             }
         });
     });

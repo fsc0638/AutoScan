@@ -230,58 +230,69 @@ async function startAnalysis() {
     llmUI.updateButtonState('loading', '分析中...');
 
     // ==========================================
-    // 重要：所有標準模型都使用 AutoScan 系統指令
-    // 模擬 Agent 的行為
+    // 使用 Agent Skills 4 階段處理流程
     // ==========================================
-    const systemInstruction = typeof window.getSystemInstruction === 'function'
-      ? await window.getSystemInstruction(targetLanguage)
-      : null;
 
-    console.log(`[App] Using AutoScan system instruction for ${selection.provider} - ${selection.model}`);
-
-    // 🌍 Add explicit translation reminder to user prompt
-    const translationReminder = `\n\n⚠️ CRITICAL REMINDER: Output language MUST be ${targetLanguage}. Translate ALL content values to ${targetLanguage}. Do NOT keep source language.`;
-    const textWithReminder = textToAnalyze + translationReminder;
-
-    // Call LLM Core
-    const result = await window.llmCore.call(textWithReminder, {
-      provider: selection.provider,
-      model: selection.model,
-      targetLanguage: targetLanguage,
-      systemInstruction: systemInstruction,  // 永遠使用 AutoScan 指令
-      useAgent: selection.useAgent  // 只有這個決定是否用 Vertex AI Agent
-    });
-
-    console.log('[App] LLM result:', result);
-
-    // Parse the result - 永遠嘗試解析結構化輸出
-    let keyPoints;
-    if (typeof window.parseStructuredOutput === 'function') {
-      keyPoints = window.parseStructuredOutput(result.text);
-      console.log('[App] Parsed keyPoints:', keyPoints);
-
-      // 🔧 Convert format if needed
-      if (typeof window.convertToPropertiesFormat === 'function') {
-        keyPoints = window.convertToPropertiesFormat(keyPoints);
-        console.log('[App] After format conversion:', keyPoints);
-      }
-
-      // Validate keyPoints structure
-      if (!Array.isArray(keyPoints)) {
-        console.warn('[App] parseStructuredOutput did not return array, falling back to parseKeyPoints');
-        keyPoints = null;
-      }
+    // Check if Skills Processor is available
+    if (!window.SkillsProcessor) {
+      throw new Error('Skills Processor not loaded. Please refresh the page.');
     }
 
-    if (!keyPoints && typeof window.parseKeyPoints === 'function') {
-      keyPoints = window.parseKeyPoints(result.text);
-      console.log('[App] Fallback parsed keyPoints:', keyPoints);
-    }
+    // Check if using Agent mode
+    if (selection.useAgent) {
+      // For Agent mode, keep the original system instruction approach
+      const systemInstruction = typeof window.getSystemInstruction === 'function'
+        ? await window.getSystemInstruction(targetLanguage)
+        : null;
 
-    if (!keyPoints || !Array.isArray(keyPoints)) {
-      // Fallback: split by lines
-      console.warn('[App] Using line-split fallback');
-      keyPoints = result.text.split('\n').filter(line => line.trim());
+      console.log('[App] Using Vertex AI Agent with system instruction');
+
+      const result = await window.llmCore.call(textToAnalyze, {
+        provider: selection.provider,
+        model: selection.model,
+        targetLanguage: targetLanguage,
+        systemInstruction: systemInstruction,
+        useAgent: true
+      });
+
+      // Parse result normally
+      keyPoints = window.parseStructuredOutput ? window.parseStructuredOutput(result.text) : [];
+
+    } else {
+      // For standard models, use Skills Processor
+      console.log('[App] Using Skills Processor 4-phase pipeline');
+      showStatus('📋 Phase 1/4: 清洗文本...', 'info');
+
+      // Initialize Skills Processor (no need for SkillsLoader in browser)
+      // Create a mock loader with built-in prompts
+      const mockLoader = {
+        buildPhase1Prompt: (text) => window.SkillsProcessor.prototype.buildPhase1Prompt(text),
+        buildPhase2Prompt: (text) => window.SkillsProcessor.prototype.buildPhase2Prompt(text),
+        buildPhase3Prompt: (text, org) => window.SkillsProcessor.prototype.buildPhase3Prompt(text, org),
+        buildPhase4Prompt: (json) => window.SkillsProcessor.prototype.buildPhase4Prompt(json)
+      };
+
+      const processor = new SkillsProcessor(mockLoader, window.llmCore);
+
+      // Get user-selected department info from UI
+      const selectedDept = window.departmentSelector ?
+        window.departmentSelector.getSelectedDepartmentInfo() :
+        null;
+
+      console.log('[App] User selected department:', selectedDept);
+
+      // Run 4-phase processing with department info
+      const result = await processor.process(textToAnalyze, {
+        provider: selection.provider,
+        model: selection.model,
+        targetLanguage: targetLanguage,
+        selectedDepartment: selectedDept  // Pass user-selected department
+      });
+
+      console.log('[App] Skills Processor result:', result);
+
+      // Use the validated data from Phase 4
+      keyPoints = result.data;
     }
 
     // Final validation

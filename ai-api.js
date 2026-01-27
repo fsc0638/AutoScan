@@ -351,54 +351,92 @@ function displayKeyPoints(keyPoints) {
 
     currentKeyPoints = keyPoints;
 
-    // Check if structured data - handle both {properties: {...}} and direct {...} formats
-    const isStructured = keyPoints.length > 0 && typeof keyPoints[0] === 'object' && (keyPoints[0].properties || keyPoints[0]['ToDo'] || keyPoints[0]['專案']);
+    // Recursive unpacker for Notion / complex objects
+    const unpackValue = (v) => {
+        if (v === null || v === undefined) return '';
+        if (typeof v === 'string') return v;
+        if (Array.isArray(v)) return v.map(unpackValue).filter(s => s).join(', ');
 
-    console.log('[displayKeyPoints] isStructured:', isStructured);
-    console.log('[displayKeyPoints] First item:', keyPoints[0]);
+        if (typeof v === 'object') {
+            // Notion Patterns
+            if (v.title) return unpackValue(v.title);
+            if (v.name) return unpackValue(v.name);
+            if (v.select) return unpackValue(v.select);
+            if (v.multi_select) return unpackValue(v.multi_select);
+            if (v.date) return v.date.start || '';
+            if (v.text) return unpackValue(v.text);
+            if (v.content) return unpackValue(v.content);
+
+            // Try to find any string property if no standard pattern matches
+            const firstString = Object.values(v).find(val => typeof val === 'string');
+            return firstString || '';
+        }
+        return String(v);
+    };
+
+    const getFieldValue = (item, fieldName) => {
+        let val = item[fieldName];
+        if (val === undefined && item.properties) val = item.properties[fieldName];
+        return unpackValue(val);
+    };
 
     let html = '<div class="key-points-list">';
-    if (isStructured) {
-        html += keyPoints.map((item, index) => {
-            const props = item.properties || item;
-            return `
-                <div class="key-point-item structured" data-index="${index}">
-                    <div class="key-point-number">${index + 1}</div>
-                    <div class="key-point-content">
-                        <div class="field-group full-width">
-                            <input type="text" class="edit-field title" value="${escapeHtmlAttribute(props.ToDo || '')}" data-field="ToDo">
-                        </div>
-                        <div class="meta-row">
-                            <div class="field-group"><span class="field-icon">📁</span><input type="text" class="edit-field tag" value="${escapeHtmlAttribute(Array.isArray(props.歸屬分類) ? props.歸屬分類.join(', ') : (props.歸屬分類 || ''))}" data-field="歸屬分類"></div>
-                            <div class="field-group"><span class="field-icon">📎</span><input type="text" class="edit-field project" value="${escapeHtmlAttribute(Array.isArray(props.專案) ? props.專案.join(', ') : (props.專案 || ''))}" data-field="專案"></div>
-                        </div>
-                        <div class="meta-row">
-                            <div class="field-group"><span class="field-icon">👤</span><input type="text" class="edit-field person" value="${escapeHtmlAttribute(props.負責人 || '')}" data-field="負責人"></div>
-                            <div class="field-group"><span class="field-icon">📅</span><input type="date" class="edit-field date" value="${escapeHtmlAttribute(props.到期日 || '')}" data-field="到期日"></div>
-                            <div class="field-group"><span class="field-icon">⚙️</span>
-                                <select class="edit-field status" data-field="狀態">
-                                    <option value="未開始" ${props.狀態 === '未開始' ? 'selected' : ''}>未開始</option>
-                                    <option value="進行中" ${props.狀態 === '進行中' ? 'selected' : ''}>進行中</option>
-                                    <option value="已完成" ${props.狀態 === '已完成' ? 'selected' : ''}>已完成</option>
-                                </select>
-                            </div>
+    html += keyPoints.map((item, index) => {
+        const toDo = getFieldValue(item, 'ToDo');
+        const category = getFieldValue(item, '歸屬分類') || getFieldValue(item, '來源');
+        const project = getFieldValue(item, '專案');
+        const person = getFieldValue(item, '負責人');
+        const dateRaw = getFieldValue(item, '到期日') || getFieldValue(item, '建立時間');
+        const status = getFieldValue(item, '狀態');
+
+        // Ensure date is yyyy-mm-dd for the HTML5 date input
+        let dateFormatted = '';
+        if (dateRaw) {
+            const dateMatch = String(dateRaw).match(/\d{4}-\d{2}-\d{2}/);
+            dateFormatted = dateMatch ? dateMatch[0] : '';
+        }
+
+        return `
+            <div class="key-point-item structured" data-index="${index}">
+                <div class="key-point-number">${index + 1}</div>
+                <div class="key-point-content">
+                    <div class="field-group full-width">
+                        <input type="text" class="edit-field title" value="${escapeHtmlAttribute(toDo)}" data-field="ToDo">
+                    </div>
+                    <div class="meta-row">
+                        <div class="field-group"><span class="field-icon">📁</span><input type="text" class="edit-field tag" value="${escapeHtmlAttribute(category)}" data-field="歸屬分類"></div>
+                        <div class="field-group"><span class="field-icon">📎</span><input type="text" class="edit-field project" value="${escapeHtmlAttribute(project)}" data-field="專案"></div>
+                    </div>
+                    <div class="meta-row">
+                        <div class="field-group"><span class="field-icon">👤</span><input type="text" class="edit-field person" value="${escapeHtmlAttribute(person)}" data-field="負責人"></div>
+                        <div class="field-group"><span class="field-icon">📅</span><input type="date" class="edit-field date" value="${escapeHtmlAttribute(dateFormatted)}" data-field="到期日"></div>
+                        <div class="field-group"><span class="field-icon">⚙️</span>
+                            <select class="edit-field status" data-field="狀態">
+                                <option value="未開始" ${status === '未開始' ? 'selected' : ''}>未開始</option>
+                                <option value="進行中" ${status === '進行中' ? 'selected' : ''}>進行中</option>
+                                <option value="已完成" ${status === '已完成' || status === '完成' ? 'selected' : ''}>已完成</option>
+                            </select>
                         </div>
                     </div>
-                </div>`;
-        }).join('');
-    } else {
-        html += keyPoints.map((point, index) => `
-            <div class="key-point-item simple">
-                <div class="key-point-number">${index + 1}</div>
-                <div class="key-point-content"><textarea class="edit-field simple-item" rows="2" data-index="${index}">${escapeHtml(point)}</textarea></div>
-            </div>`).join('');
-    }
+                </div>
+            </div>`;
+    }).join('');
+
     html += '</div>';
     container.innerHTML = html;
 }
 
-function escapeHtmlAttribute(text) { return text ? text.toString().replace(/"/g, '&quot;') : ''; }
-function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+function escapeHtmlAttribute(text) {
+    if (text === null || text === undefined) return '';
+    if (typeof text === 'object') return JSON.stringify(text).replace(/"/g, '&quot;');
+    return text.toString().replace(/"/g, '&quot;');
+}
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = typeof text === 'object' ? JSON.stringify(text) : text;
+    return div.innerHTML;
+}
 
 function showStatusMessage(message, type = 'info') {
     const statusDiv = document.getElementById('statusMessage');
