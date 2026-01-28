@@ -79,7 +79,7 @@ async function callAIModel(text, targetLanguage = 'Traditional Chinese') {
         console.error('[AI API Wrapper] LLM Core not available, falling back to direct API calls');
         // Fallback to old implementation
         const defaultVersions = {
-            gemini: 'gemini-2.0-flash-exp',
+            gemini: 'gemini-2.5-flash',
             openai: 'gpt-4o'
         };
 
@@ -383,7 +383,7 @@ function displayKeyPoints(keyPoints) {
     let html = '<div class="key-points-list">';
     html += keyPoints.map((item, index) => {
         const toDo = getFieldValue(item, 'ToDo');
-        const category = getFieldValue(item, '歸屬分類') || getFieldValue(item, '來源');
+        const category = getFieldValue(item, '來源') || getFieldValue(item, '歸屬分類');
         const project = getFieldValue(item, '專案');
         const person = getFieldValue(item, '負責人');
         const dateRaw = getFieldValue(item, '到期日') || getFieldValue(item, '建立時間');
@@ -404,7 +404,7 @@ function displayKeyPoints(keyPoints) {
                         <input type="text" class="edit-field title" value="${escapeHtmlAttribute(toDo)}" data-field="ToDo">
                     </div>
                     <div class="meta-row">
-                        <div class="field-group"><span class="field-icon">📁</span><input type="text" class="edit-field tag" value="${escapeHtmlAttribute(category)}" data-field="歸屬分類"></div>
+                        <div class="field-group"><span class="field-icon">📁</span><input type="text" class="edit-field tag" value="${escapeHtmlAttribute(category)}" data-field="來源"></div>
                         <div class="field-group"><span class="field-icon">📎</span><input type="text" class="edit-field project" value="${escapeHtmlAttribute(project)}" data-field="專案"></div>
                     </div>
                     <div class="meta-row">

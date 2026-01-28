@@ -35,10 +35,10 @@ const VERTEX_AGENT_CONFIG = {
  * @param {File|null} file - 可選的檔案物件（用於檔案分析）
  * @returns {Promise<Array>} 結構化 JSON 陣列
  */
-async function callVertexAgent(text, file = null) {
+async function callVertexAgent(text, options = {}) {
     console.log('[Vertex Agent] Starting agent call...');
     console.log('[Vertex Agent] Text length:', text.length);
-    console.log('[Vertex Agent] File provided:', !!file);
+    const { systemInstruction, targetLanguage, file = null } = options;
 
     try {
         // 透過 Server Proxy 呼叫 Vertex AI Agent
@@ -52,7 +52,9 @@ async function callVertexAgent(text, file = null) {
                 projectId: VERTEX_AGENT_CONFIG.projectId,
                 location: VERTEX_AGENT_CONFIG.location,
                 engineId: VERTEX_AGENT_CONFIG.engineId,
-                dataStoreId: VERTEX_AGENT_CONFIG.dataStoreId
+                dataStoreId: VERTEX_AGENT_CONFIG.dataStoreId,
+                systemInstruction: systemInstruction,
+                targetLanguage: targetLanguage
             })
         });
 

@@ -16,9 +16,47 @@ class SkillsProcessor {
     }
 
     /**
+     * Helper: Extract JSON from text that might contain conversational filler or markdown
+     */
+    extractJSON(text) {
+        if (!text) return null;
+        let cleaned = text.trim();
+
+        // 1. Try direct parse
+        try {
+            return JSON.parse(cleaned);
+        } catch (e) { }
+
+        // 2. Remove common Markdown markers
+        cleaned = cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        try {
+            return JSON.parse(cleaned);
+        } catch (e) { }
+
+        // 3. Brute force search for JSON structure
+        const startIdx = Math.min(
+            cleaned.indexOf('{') === -1 ? Infinity : cleaned.indexOf('{'),
+            cleaned.indexOf('[') === -1 ? Infinity : cleaned.indexOf('[')
+        );
+        const endIdx = Math.max(
+            cleaned.lastIndexOf('}'),
+            cleaned.lastIndexOf(']')
+        );
+
+        if (startIdx !== Infinity && endIdx !== -1 && endIdx > startIdx) {
+            try {
+                return JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+            } catch (e) { }
+        }
+
+        throw new Error('無法從文本中提取有效的 JSON 結構');
+    }
+
+    /**
      * Main processing pipeline
      */
     async process(inputText, options) {
+        const startTime = performance.now();
         console.log('[SkillsProcessor] 🚀 Starting 4-phase processing pipeline...');
         console.log('[SkillsProcessor] Input length:', inputText.length, 'chars');
         console.log('[SkillsProcessor] Options:', options);
@@ -26,21 +64,30 @@ class SkillsProcessor {
         try {
             // PHASE 1: Sanitizer - Clean the text
             console.log('\n[SkillsProcessor] === PHASE 1: Sanitizer ===');
+            const p1Start = performance.now();
             const cleanedText = await this.runPhase1(inputText, options);
+            console.log(`[SkillsProcessor] Phase 1 completed in ${(performance.now() - p1Start).toFixed(2)}ms`);
 
             // PHASE 2: Org Specialist - Identify organization info
             console.log('\n[SkillsProcessor] === PHASE 2: Org Specialist ===');
+            const p2Start = performance.now();
             const orgData = await this.runPhase2(cleanedText, options);
+            console.log(`[SkillsProcessor] Phase 2 completed in ${(performance.now() - p2Start).toFixed(2)}ms`);
 
             // PHASE 3: Schema Mapper - Convert to Notion format
             console.log('\n[SkillsProcessor] === PHASE 3: Schema Mapper ===');
+            const p3Start = performance.now();
             const jsonArray = await this.runPhase3(cleanedText, orgData, options);
+            console.log(`[SkillsProcessor] Phase 3 completed in ${(performance.now() - p3Start).toFixed(2)}ms`);
 
             // PHASE 4: QA Inspector - Validate and clean
             console.log('\n[SkillsProcessor] === PHASE 4: QA Inspector ===');
+            const p4Start = performance.now();
             const validatedData = await this.runPhase4(jsonArray, options);
+            console.log(`[SkillsProcessor] Phase 4 completed in ${(performance.now() - p4Start).toFixed(2)}ms`);
 
-            console.log('[SkillsProcessor] ✅ Pipeline completed successfully');
+            const totalDuration = performance.now() - startTime;
+            console.log(`[SkillsProcessor] ✅ Pipeline completed successfully in ${totalDuration.toFixed(2)}ms`);
             console.log('[SkillsProcessor] Output items:', validatedData.length);
 
             return {
@@ -67,7 +114,8 @@ class SkillsProcessor {
      * Output: Cleaned, well-structured text
      */
     async runPhase1(inputText, options) {
-        const prompt = this.buildPhase1Prompt(inputText);
+        const targetLanguage = options?.targetLanguage || 'Traditional Chinese';
+        const prompt = this.buildPhase1Prompt(inputText, targetLanguage);
 
         if (this.debug) {
             console.log('[Phase 1] Prompt length:', prompt.length);
@@ -91,13 +139,14 @@ class SkillsProcessor {
     /**
      * Build Phase 1 Prompt
      */
-    buildPhase1Prompt(inputText) {
-        return `你是一位專門的「文本清洗專家」，負責將非結構化的口語資料轉化為乾淨、語意完整的書面文本。
+    buildPhase1Prompt(inputText, targetLanguage = 'Traditional Chinese') {
+        return `你是一位專門的「文本清洗與翻譯專家」，負責將非結構化的口語資料轉化為乾淨、語意完整的書面文本，並確保語言符合目標要求。
 
 【核心任務】
 1. 強制去噪 (De-noise): 刪除「然後、那個、比較、就是、出來、這樣子、對對對、嗯、啊、呢」等語助詞。
 2. 語意重組 (Rephrase): 將破碎句子合併為完整的書面語，補齊主詞、謂語、受詞。
-3. 保持繁體中文。
+3. **語系轉換 (Translation)**: 必須將輸出內容完全轉換為「${targetLanguage}」。若輸入為其他語言，請務必進行準確翻譯。
+4. 保持語氣正式、簡潔。
 
 【輸入文本】
 ${inputText}
@@ -119,6 +168,7 @@ ${inputText}
         }
 
         const prompt = this.buildPhase2Prompt(cleanedText, selectedDept);
+
         const result = await this.llm.call(prompt, {
             ...options,
             systemInstruction: null
@@ -126,8 +176,7 @@ ${inputText}
 
         let orgData;
         try {
-            let jsonText = result.text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
-            orgData = JSON.parse(jsonText);
+            orgData = this.extractJSON(result.text);
 
             // FORCE OVERRIDE with user selection if available
             const subDept = selectedDept?.subDepartment;
@@ -141,7 +190,8 @@ ${inputText}
                 console.log('[Phase 2] Final Dept Group Code:', orgData.責任部門代碼);
             }
         } catch (parseError) {
-            console.warn('[Phase 2] Parse failed, fallback to defaults');
+            console.warn('[Phase 2] Parse failed, fallback to defaults. Raw text:', result.text);
+            console.error('[Phase 2] Error:', parseError.message);
             const subDept = selectedDept?.subDepartment;
             orgData = {
                 識別人員: [],
@@ -162,7 +212,15 @@ ${inputText}
         const userHint = selectedDept?.subDepartment ?
             `\n⚠️ 用戶已在 UI 選擇部門：${selectedDept.subDepartment.name} (代號: ${selectedDept.subDepartment.code})，請以此為優先參考。` : '';
 
-        return `你是一位專門的「組織識別專家」，負責識別文本中的人名和部門資訊。${userHint}
+        return `你是一位專門的「組織識別專家」，負責識別文本中的人名、職稱、部門以及他們在會議中的角色。${userHint}
+
+【核心任務】
+1. **識別參與者**：列出所有在對話中出現的人名。
+2. **區分角色**：
+   - **會議主持人/負責人**：決定方向、分配任務的人。
+   - **執行人/關係人**：被指派任務、或是被提及與某事有關的人。
+3. **識別職稱/單位**：如果文本中有提到如「工程師」、「業務」、「開發組」等，請一併記錄。
+4. **部門對應**：將識別到的部門對應到代號（如 T255, T201 等）。
 
 【參考部門清單】
 - Y200 研發中心-開發處
@@ -173,18 +231,17 @@ ${inputText}
 - C140 公關暨專案室
 - C130 資訊處
 
-【核心任務】
-1. 識別負責人(管理/決策)與執行人(實際操作)。
-2. 將識別到的部門對應到代號（如 T255, T201 等）。
-
-【輸入文本】
-${cleanedText}
+【輸出要求】
+1. 僅輸出 JSON，不要 Markdown。
+2. **負責人** 欄位請填入此份會議的最主要決策者或主持人。
+3. **執行人** 欄位請列出所有「被指派任務」或「未來需要採取行動」的人員清單。
 
 【輸出格式 (JSON)】
 {
-  "識別人員": [],
-  "負責人": ["人名" 或 "待指派"],
-  "執行人": ["人名/職稱"],
+  "識別人員": ["人名1", "人名2"],
+  "負責人": ["最主要的決策人"],
+  "執行人": ["所有被指派任務的人"],
+  "職稱或單位": ["識別到的職稱或內部單位名稱"],
   "責任部門": "名稱",
   "責任部門代碼": "4碼(如T255)或KWAY"
 }`;
@@ -204,7 +261,7 @@ ${cleanedText}
             console.log('[Phase 3] ✅ Ensuring selection is used:', orgData.責任部門代碼);
         }
 
-        const prompt = this.buildPhase3Prompt(cleanedText, orgData);
+        const prompt = this.buildPhase3Prompt(cleanedText, orgData, options);
 
         if (this.debug) {
             console.log('[Phase 3] Generating items for dept:', orgData.責任部門代碼);
@@ -217,15 +274,14 @@ ${cleanedText}
 
         let jsonArray;
         try {
-            let jsonText = result.text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
-            jsonArray = JSON.parse(jsonText);
+            jsonArray = this.extractJSON(result.text);
             if (!Array.isArray(jsonArray)) jsonArray = [jsonArray];
 
             if (this.debug) {
                 console.log('[Phase 3] Extracted items:', jsonArray.length);
             }
         } catch (e) {
-            console.error('[Phase 3] JSON parse error:', e.message);
+            console.error('[Phase 3] JSON parse error. Raw text:', result.text);
             throw e;
         }
 
@@ -235,33 +291,66 @@ ${cleanedText}
     /**
      * Build Phase 3 Prompt
      */
-    buildPhase3Prompt(cleanedText, orgData) {
+    buildPhase3Prompt(cleanedText, orgData, options = {}) {
+        const targetLanguage = options.targetLanguage || 'Traditional Chinese';
+        const sourceOptions = options.sourceOptions || '商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心';
         const deptCode = orgData?.責任部門代碼 || 'KWAY';
         const deptName = orgData?.責任部門 || '凱位';
-        const owner = orgData?.負責人?.join(', ') || '待指派';
+
+        // Potential owners identified in Phase 2
+        const identifiedPeople = orgData?.識別人員 || [];
+        const meetingLead = orgData?.負責人?.[0] || '待指派';
+        const taskOwners = orgData?.執行人 || [];
+
+        // Combine all people into a list for the AI to choose from
+        const candidates = [...new Set([...identifiedPeople, ...taskOwners, meetingLead])].filter(n => n !== '待指派');
+        const candidateStr = candidates.length > 0 ? candidates.join(', ') : '待指派';
 
         return `你是「資料庫專家」，負責將文本轉為 Notion JSON Array。
 
+【語言要求】
+**所有輸出內容（ToDo、專案、負責人、關鍵詞等）必須完全使用「${targetLanguage}」書寫。** 嚴禁用日文或其他原始語言輸出。
+
 【關鍵變數】
 - **部門前綴: ${deptCode}** (重要：必須用於「專案」欄位)
-- 負責人: ${owner}
+- **人員候選名單: [${candidateStr}]** (包含：${meetingLead} 等)
 - 部門名稱: ${deptName}
 
 【欄位規則】
-1. ToDo: 20-50 字，書面語。
+1. ToDo: **15-30 字**，精簡書面語。**必須動詞開頭**（如：優化、提升、建立、完成、審閱）。
 2. 專案: 必須為「${deptCode} 專案核心名稱」。
-3. 負責人: ["${owner}"]
+3. **負責人 (重要)**: 
+   - **語意指派**：請分析 ToDo 的內容，從「人員候選名單」中挑選最可能的負責人。
+   - **邏輯點名**：如果在文本中有人主動認領任務，或被某人指派，請填寫該人名。
+   - **預設值**：若無法確定具體個人，則填寫 ["${meetingLead}"] 或 ["待指派"]。
+   - **格式**：必須是 Array of Strings，例如 ["張三"]。
 4. 責任部門: ["${deptName}"]
-5. 來源: 從 [商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心] 擇一。
+5. 來源: 從 [${sourceOptions}] 擇一。**請務必根據 ToDo 的語意內容進行分析，選擇最貼切的來源。**
 6. 狀態: 未開始/進行中/完成 (預設使用 未開始)
-7. 關鍵詞: 3-5個有意義的名詞。**絕對嚴格禁用垃圾詞：然後、比較、覺得、沒有、時候、內容、問題、東西、大家。**
+7. 關鍵詞 (IMPORTANT): 提取 **5-8** 個具有代表性的名詞。請包含：技術術語、專案代號、具體主題。**禁止使用單個虛詞（如：的、了、是）。**
 8. 建立時間: "${new Date().toISOString().split('T')[0]}"
 
 【輸入文本】
 ${cleanedText}
 
 【輸出格式】
-純 JSON Array，不要 Markdown。提取 15-20 個獨立行動。`;
+1. **必須為純 JSON Array**，不包含 Markdown 標記或引言。
+2. **嚴禁巢狀結構**：所有欄位值必須是 String 或 String Array (如範例)。**禁止**輸出 Notion API 格式的屬性物件 (如 ❌ {"title": [...]} 或 ❌ {"select": {"name": ...}})。
+3. **範例結構**:
+[
+  {
+    "來源": "會議記錄",
+    "專案": ["${deptCode} 核心名稱"],
+    "ToDo": "動詞開頭的行動描述",
+    "狀態": "未開始",
+    "負責人": ["${meetingLead}"],
+    "責任部門": ["${deptName}"],
+    "關鍵詞": ["關鍵詞1", "關鍵詞2"],
+    "建立時間": "2026-01-28"
+  }
+]
+
+提取 15-20 個獨立行動。`;
     }
 
     /**
@@ -271,7 +360,8 @@ ${cleanedText}
      */
     async runPhase4(jsonArray, options) {
         const jsonString = JSON.stringify(jsonArray, null, 2);
-        const prompt = this.buildPhase4Prompt(jsonString);
+        const targetLanguage = options?.targetLanguage || 'Traditional Chinese';
+        const prompt = this.buildPhase4Prompt(jsonString, targetLanguage);
 
         if (this.debug) {
             console.log('[Phase 4] Starting final QA cleaning...');
@@ -284,8 +374,7 @@ ${cleanedText}
 
         let validatedData;
         try {
-            let jsonText = result.text.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
-            validatedData = JSON.parse(jsonText);
+            validatedData = this.extractJSON(result.text);
             if (!Array.isArray(validatedData)) validatedData = [validatedData];
 
             if (this.debug) {
@@ -293,7 +382,7 @@ ${cleanedText}
                 console.log('[Phase 4] Cleanup completed.');
             }
         } catch (e) {
-            console.warn('[Phase 4] Final parse failed, using Phase 3 output.');
+            console.warn('[Phase 4] Final parse failed, using Phase 3 output. Raw text:', result.text);
             validatedData = jsonArray;
         }
 
@@ -303,18 +392,25 @@ ${cleanedText}
     /**
      * Build Phase 4 Prompt
      */
-    buildPhase4Prompt(jsonData) {
+    buildPhase4Prompt(jsonData, targetLanguage = 'Traditional Chinese') {
         return `你是「品質守門員」，負責最終檢查並嚴格過濾垃圾資訊。
 
+【語言核對】
+確認所有內容是否已完全轉換為「${targetLanguage}」。若發現殘留的日文或其他語言，必須立即翻譯。
+
+【ToDo 長度限制 (CRITICAL)】
+檢查每個項目的「ToDo」：
+- **若超過 40 字，必須立即將其改寫為 15-30 字的精簡格式。**
+- **保留核心動詞與對象，刪除形容詞與背景描述。**
+
 【極度重要：清除垃圾關鍵詞】
-檢查所有「關鍵詞(Multi-select)」欄位，若包含以下詞彙，必須立即刪除並替換為有意義的專業術語：
-❌ 的、了、是、在、有、和、與、也、都、就、後
-❌ 然後、那個、比較、覺得、沒有、時候、問題、事情、大家、東西、內容、活動、物流
-❌ 確認、同意、知道、建議、希望、感覺、目前、未來、之前、後來
+檢查所有「關鍵詞(Multi-select)」欄位，若包含以下詞彙，必須立即刪除：
+❌ 的、了、是、在、有、和、與、也、都、就、後、個
+❌ 那個、這個、然後、時候、大家、東西、內容、問題
 
 【檢查規則】
-1. 確保關鍵詞欄位中「只保留具體名詞」（如：量子、金融、技術、合約、簽署、人才、人才培育）。
-2. ToDo 若太短或包含口語詞，請修訂為專業書面語（20-50字）。
+1. **保留多樣性**：每個項目應保留至少 5 個具體名詞。只要不是上述垃圾詞，請儘量保留專業術語（如：量子、金融、技術、合約、簽署、人才）。
+2. ToDo 若太短或包含口語詞，請修訂為專業書面語（15-40字）。
 3. 確保 JSON 格式完美。
 
 【輸入資料】

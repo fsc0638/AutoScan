@@ -19,7 +19,7 @@ class LLMCore {
         this.configManager = options.configManager || window.configManager;
         this.debug = options.debug !== false; // Default: true
         this.retryAttempts = options.retryAttempts || 2;
-        this.timeout = options.timeout || 60000; // 60 seconds
+        this.timeout = options.timeout || 180000; // 180 seconds (Increased from 60s for 4-phase pipeline)
 
         if (this.debug) {
             console.log('[LLM Core] Initialized with options:', options);
@@ -74,7 +74,7 @@ class LLMCore {
                 // Use Vertex AI Agent
                 if (typeof window.callVertexAgent === 'function') {
                     return await this.callWithRetry(() =>
-                        window.callVertexAgent(text)
+                        window.callVertexAgent(text, { systemInstruction, targetLanguage })
                     );
                 } else {
                     throw new Error('Vertex AI Agent 模組未載入');
@@ -135,11 +135,19 @@ class LLMCore {
 
         const url = `${baseUrl}?key=${apiKey}`;
 
+        // Payload Validation
+        if (!text || typeof text !== 'string' || text.trim() === '') {
+            throw new Error('LLM Call failed: Prompt text is empty or invalid.');
+        }
+
         const requestBody = {
-            contents: [{ parts: [{ text }] }],
+            contents: [{
+                role: 'user',
+                parts: [{ text: text.trim() }]
+            }],
             generationConfig: {
-                maxOutputTokens: maxTokens,
-                temperature: temperature
+                maxOutputTokens: maxTokens || 8192,
+                temperature: temperature || 0.7
             }
         };
 

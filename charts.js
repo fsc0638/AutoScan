@@ -404,9 +404,9 @@ function renderStatusChart(data, container) {
 function renderCategoryChart(data, container) {
     const categoryCounts = {};
     data.forEach(item => {
-        // Support item.歸屬分類, item.來源, or their nested versions
-        const categories = item.歸屬分類 || (item.properties && item.properties.歸屬分類) ||
-            item.來源 || (item.properties && item.properties.來源) || [];
+        // Support item.來源, item.歸屬分類, or their nested versions
+        const categories = item.來源 || (item.properties && item.properties.來源) ||
+            item.歸屬分類 || (item.properties && item.properties.歸屬分類) || [];
 
         // Handle both string and array formats
         const categoryArray = Array.isArray(categories) ? categories : [categories];

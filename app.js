@@ -11,6 +11,45 @@
 let transcript = '';
 window.currentKeyPoints = [];
 let statusTimeout = null;
+let analysisInterval = null;
+let analysisStartTime = null;
+
+// Multi-language Status Dictionary
+const STATUS_I18N = {
+  'zh-TW': {
+    'starting': '🚀 正在啟動 AI 進行分析...',
+    'phase1': '📋 階段 1/4: 清洗文本...',
+    'phase2': '📋 階段 2/4: 組織識別...',
+    'phase3': '📋 階段 3/4: Notion 結構映射...',
+    'phase4': '📋 階段 4/4: 品質核檢...',
+    'success': '✅ 分析完成！',
+    'error': '❌ 分析失敗',
+    'loading': '分析中...',
+    'executing': '已執行'
+  },
+  'en': {
+    'starting': '🚀 Starting AI analysis...',
+    'phase1': '📋 Phase 1/4: Sanitizing text...',
+    'phase2': '📋 Phase 2/4: Org Specialist...',
+    'phase3': '📋 Phase 3/4: Notion mapping...',
+    'phase4': '📋 Phase 4/4: QA Inspector...',
+    'success': '✅ Analysis complete!',
+    'error': '❌ Analysis failed',
+    'loading': 'Analyzing...',
+    'executing': 'Executing'
+  },
+  'ja': {
+    'starting': '🚀 AI分析を開始しています...',
+    'phase1': '📋 フェーズ 1/4: テキストのクレンジング...',
+    'phase2': '📋 フェーズ 2/4: 組織の識別...',
+    'phase3': '📋 フェーズ 3/4: Notion構造マッピング...',
+    'phase4': '📋 フェーズ 4/4: 品質チェック...',
+    'success': '✅ 分析が完了しました！',
+    'error': '❌ 分析に失敗しました',
+    'loading': '分析中...',
+    'executing': '実行中'
+  }
+};
 
 // LLM UI Component instance
 let llmUI = null;
@@ -226,8 +265,11 @@ async function startAnalysis() {
 
   // Start AI analysis
   try {
-    showStatus('🚀 正在啟動 AI 進行分析...', 'info');
-    llmUI.updateButtonState('loading', '分析中...');
+    const lang = elements.languageSelect.value;
+    const i18n = STATUS_I18N[lang] || STATUS_I18N['zh-TW'];
+
+    showStatus(i18n.starting, 'loading', true);
+    llmUI.updateButtonState('loading', i18n.loading);
 
     // ==========================================
     // 使用 Agent Skills 4 階段處理流程
@@ -261,14 +303,14 @@ async function startAnalysis() {
     } else {
       // For standard models, use Skills Processor
       console.log('[App] Using Skills Processor 4-phase pipeline');
-      showStatus('📋 Phase 1/4: 清洗文本...', 'info');
+      showStatus(i18n.phase1, 'loading', true);
 
       // Initialize Skills Processor (no need for SkillsLoader in browser)
       // Create a mock loader with built-in prompts
       const mockLoader = {
         buildPhase1Prompt: (text) => window.SkillsProcessor.prototype.buildPhase1Prompt(text),
-        buildPhase2Prompt: (text) => window.SkillsProcessor.prototype.buildPhase2Prompt(text),
-        buildPhase3Prompt: (text, org) => window.SkillsProcessor.prototype.buildPhase3Prompt(text, org),
+        buildPhase2Prompt: (text, dept) => window.SkillsProcessor.prototype.buildPhase2Prompt(text, dept),
+        buildPhase3Prompt: (text, org, opt) => window.SkillsProcessor.prototype.buildPhase3Prompt(text, org, opt),
         buildPhase4Prompt: (json) => window.SkillsProcessor.prototype.buildPhase4Prompt(json)
       };
 
@@ -281,18 +323,33 @@ async function startAnalysis() {
 
       console.log('[App] User selected department:', selectedDept);
 
-      // Run 4-phase processing with department info
-      const result = await processor.process(textToAnalyze, {
+      const sourceOptions = localStorage.getItem('notion_source_options') ||
+        '商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心';
+
+      const skillsOptions = {
         provider: selection.provider,
         model: selection.model,
         targetLanguage: targetLanguage,
-        selectedDepartment: selectedDept  // Pass user-selected department
-      });
+        selectedDepartment: selectedDept,
+        sourceOptions: sourceOptions
+      };
 
-      console.log('[App] Skills Processor result:', result);
+      // Decompose 4-phase process to allow step-by-step status updates
+      showStatus(i18n.phase1, 'loading', true);
+      const cleanedText = await processor.runPhase1(textToAnalyze, skillsOptions);
 
-      // Use the validated data from Phase 4
-      keyPoints = result.data;
+      showStatus(i18n.phase2, 'loading', true);
+      const orgData = await processor.runPhase2(cleanedText, skillsOptions);
+
+      showStatus(i18n.phase3, 'loading', true);
+      const jsonArray = await processor.runPhase3(cleanedText, orgData, skillsOptions);
+
+      showStatus(i18n.phase4, 'loading', true);
+      const validatedData = await processor.runPhase4(jsonArray, skillsOptions);
+
+      // Use the validated data
+      keyPoints = validatedData;
+      console.log('[App] Skills Processor pipeline completed:', keyPoints.length, 'items');
     }
 
     // Final validation
@@ -328,10 +385,16 @@ async function startAnalysis() {
     if (configManager.isConfigured('notion')) {
       elements.uploadToNotion.style.display = 'inline-flex';
     }
+    // Display success
+    showStatus(`${i18n.success} (${keyPoints.length})`, 'success');
+    llmUI.updateButtonState('normal');
+
   } catch (error) {
     console.error('Analysis error:', error);
-    showStatus(`❌ 出錯了: ${error.message}`, 'error');
-    llmUI.updateButtonState('error', '發生錯誤');
+    const lang = elements.languageSelect.value;
+    const i18n = STATUS_I18N[lang] || STATUS_I18N['zh-TW'];
+    showStatus(`${i18n.error}: ${error.message}`, 'error');
+    llmUI.updateButtonState('normal');
   }
 }
 
@@ -536,6 +599,12 @@ async function handleUpdateSchema() {
       }
     }
 
+    // Cache specific options for logic
+    if (schemaResults['來源'] && schemaResults['來源'].options) {
+      localStorage.setItem('notion_source_options', schemaResults['來源'].options.join(', '));
+      console.log('[App] Cached Source options:', schemaResults['來源'].options);
+    }
+
     // Save to file via server endpoint
     const saveResponse = await fetch('/api/save-notion-schema', {
       method: 'POST',
@@ -654,8 +723,13 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
       }
 
       // Multi-select fields (only add if not empty)
-      if (props.歸屬分類 && Array.isArray(props.歸屬分類) && props.歸屬分類.length > 0) {
-        notionProperties['歸屬分類'] = {
+      if (props.來源 && Array.isArray(props.來源) && props.來源.length > 0) {
+        notionProperties['來源'] = {
+          multi_select: props.來源.map(name => ({ name }))
+        };
+      } else if (props.歸屬分類 && Array.isArray(props.歸屬分類) && props.歸屬分類.length > 0) {
+        // Backward compatibility for UI
+        notionProperties['來源'] = {
           multi_select: props.歸屬分類.map(name => ({ name }))
         };
       }
@@ -663,6 +737,23 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
       if (props.專案 && Array.isArray(props.專案) && props.專案.length > 0) {
         notionProperties['專案'] = {
           multi_select: props.專案.map(name => ({ name }))
+        };
+      }
+
+      const keywords = props.關鍵詞 || props.關鍵字 || props.關鍵字標籤;
+      if (keywords && Array.isArray(keywords) && keywords.length > 0) {
+        notionProperties['關鍵詞'] = {
+          multi_select: keywords.map(name => ({ name }))
+        };
+      }
+
+      if (props.責任部門 && Array.isArray(props.責任部門) && props.責任部門.length > 0) {
+        notionProperties['責任部門'] = {
+          multi_select: props.責任部門.map(name => ({ name }))
+        };
+      } else if (props.責任部門 && typeof props.責任部門 === 'string') {
+        notionProperties['責任部門'] = {
+          multi_select: [{ name: props.責任部門 }]
         };
       }
 
@@ -841,30 +932,51 @@ async function uploadSimpleDataToNotion(points, config, isLocalhost) {
 // 8. Utility Functions
 // ==========================================
 
-function showStatus(message, type = 'info') {
+function showStatus(message, type = 'info', hasTimer = false) {
   if (!elements.statusMessage) return;
 
-  // Clear any pending timeout to prevent hiding the new status prematurely
+  // Clear any pending timeout
   if (statusTimeout) {
     clearTimeout(statusTimeout);
     statusTimeout = null;
   }
 
-  // Use innerHTML to support line breaks and formatting
-  // Replace \n with <br> for proper line breaks
-  elements.statusMessage.innerHTML = message.replace(/\n/g, '<br>');
+  // Clear existing interval if starting a new status or stopping
+  if (analysisInterval) {
+    clearInterval(analysisInterval);
+    analysisInterval = null;
+  }
 
-  // Use simple class name to match CSS (.status-message.success etc.)
+  const lang = elements.languageSelect ? elements.languageSelect.value : 'zh-TW';
+  const i18n = STATUS_I18N[lang] || STATUS_I18N['zh-TW'];
+
+  const updateDisplay = () => {
+    let displayMessage = message.replace(/\n/g, '<br>');
+    if (hasTimer && analysisStartTime) {
+      const seconds = Math.floor((Date.now() - analysisStartTime) / 1000);
+      displayMessage += ` <span style="opacity: 0.8; font-size: 0.9em;">(${i18n.executing}: ${seconds}s)</span>`;
+    }
+    elements.statusMessage.innerHTML = displayMessage;
+  };
+
+  if (hasTimer) {
+    if (!analysisStartTime || type === 'loading') {
+      analysisStartTime = Date.now();
+    }
+    updateDisplay();
+    analysisInterval = setInterval(updateDisplay, 1000);
+  } else {
+    analysisStartTime = null;
+    elements.statusMessage.innerHTML = message.replace(/\n/g, '<br>');
+  }
+
   elements.statusMessage.className = `status-message ${type}`;
+  elements.statusMessage.style.display = type === 'loading' || hasTimer ? 'flex' : 'block';
 
-  // Ensure display is block/flex (CSS loading uses flex)
-  elements.statusMessage.style.display = type === 'loading' ? 'flex' : 'block';
-
-  // Auto-hide for all types except 'loading' after 30 seconds
-  if (type !== 'loading') {
+  if (type !== 'loading' && !hasTimer) {
     statusTimeout = setTimeout(() => {
       elements.statusMessage.style.display = 'none';
-    }, 30000); // 30 seconds
+    }, 30000);
   }
 }
 

@@ -105,8 +105,14 @@ app.post(/^\/api\/gemini\/(.*)/, async (req, res) => {
         });
 
         const data = await response.json();
+
+        if (!response.ok) {
+            console.error('[Server] Gemini API Proxy Error:', JSON.stringify(data, null, 2));
+        }
+
         res.status(response.status).json(data);
     } catch (error) {
+        console.error('[Server] Gemini Proxy Exception:', error.message);
         res.status(500).json({ message: error.message });
     }
 });
@@ -401,7 +407,7 @@ if (fs.existsSync(SERVICE_ACCOUNT_PATH)) {
 app.post('/api/vertex-agent/query', async (req, res) => {
     console.log('[Server] Vertex Agent query received');
 
-    const { query, projectId, location } = req.body;
+    const { query, projectId, location, systemInstruction: clientSystemInstruction, targetLanguage = '繁體中文' } = req.body;
 
     if (!query) {
         return res.status(400).json({ message: 'Missing required field: query' });
@@ -423,12 +429,17 @@ app.post('/api/vertex-agent/query', async (req, res) => {
 
         // Vertex AI Gemini API - Use Gemini 2.0 Flash for structured output
         const model = 'gemini-2.0-flash-exp';
-        const apiUrl = `https://${actualLocation}-aiplatform.googleapis.com/v1beta1/projects/${actualProjectId}/locations/${actualLocation}/publishers/google/models/${model}:generateContent`;
+        const apiVersion = 'v1beta1';
+        const apiUrl = `https://${actualLocation}-aiplatform.googleapis.com/${apiVersion}/projects/${actualProjectId}/locations/${actualLocation}/publishers/google/models/${model}:generateContent`;
 
-        console.log('[Server] Calling Vertex AI Gemini API:', actualProjectId, model);
+        console.log('[Server] Calling Vertex AI Gemini API:', actualProjectId, model, 'Target Language:', targetLanguage);
 
-        // System Instruction - Same as in ai-api.js but for Vertex AI
-        const systemInstruction = `# Role
+        // Determine which system instruction to use
+        let systemInstruction = clientSystemInstruction;
+
+        if (!systemInstruction) {
+            // Fallback to default server-side instruction but with dynamic language
+            systemInstruction = `# Role
 你是一位專門負責 Notion 數據結構化的專家。你的任務是將「會議內容」拆解為**多個**獨立的行動項目，每個項目對應一筆 Notion 資料庫記錄。
 
 # 核心任務
@@ -439,16 +450,17 @@ app.post('/api/vertex-agent/query', async (req, res) => {
 2. **禁止堆疊**：嚴禁將所有資訊塞入單一 ToDo 欄位。每個行動項目都應該是獨立的物件。
 3. **資訊拆解**：將背景資訊、專案名、負責人、日期分別提取到對應欄位。
 4. **語言翻譯（極度重要）**：
-   - **100% 完整翻譯**：所有輸出內容必須完全翻譯成「繁體中文」，不得保留任何原語言文字
+   - **100% 完整翻譯**：所有輸出內容必須完全翻譯成「${targetLanguage}」，不得保留任何原語言文字
    - **專有名詞處理**：公司名稱、人名、地名等專有名詞也必須翻譯或音譯
-5. **輸出格式**：嚴格遵守 JSON 格式。僅輸出純 JSON 陣列，不要包含 Markdown 標籤或開場白。
+5. **輸出格式**：嚴格遵守 JSON 格式。僅輸出純 JSON 陣列，不要包含 Markdown 標誌或開場白。
 
 # Field Mapping Logic (欄位對齊邏輯)
-- **歸屬分類 (Array)**: 根據語意判斷分類（例：補助申請、海外市場、商務簽約、法說會、研討會）。
-- **專案 (Array)**: 提取具體的專案名稱（例：台日產業交流活動、Goonas合作案、12/18簽約儀式）。
-- **ToDo (String)**: 提取「重點大意」，字數不需過於精簡，約50字以下。
+- **來源 (Array)**: 從 [商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心] 擇一。
+- **專案 (Array)**: 提取具體的專案名稱。
+- **ToDo (String)**: 核心行動大意，**約 20-30 字**。必須**動作導向**（例如：優化...、建立...）。
 - **狀態 (Status)**: 根據內容判定，預設為 "未開始"
-- **負責人 (Person)**: 提取語意中提到的單位、個人、實體、公司部門。
+- **負責人 (Person)**: 提取人名或單位。
+- **關鍵詞 (Array)**: 3-5 個專業術語標籤。
 - **到期日 (Date)**: 提取日期格式 YYYY-MM-DD。
 - **建立時間 (DateTime)**: 使用 ${new Date().toISOString().slice(0, 19).replace('T', ' ')}。
 
@@ -457,11 +469,12 @@ app.post('/api/vertex-agent/query', async (req, res) => {
   {
     "operation": "CREATE",
     "properties": {
-      "歸屬分類": ["商務簽約"],
+      "來源": ["會議記錄"],
       "專案": ["Goonas合作案"],
-      "ToDo": "與日本公司簽約",
+      "ToDo": "簽署日本公司合作意向書並確認細節",
       "狀態": "未開始",
       "負責人": "凱衛",
+      "關鍵詞": ["商務簽約", "合約審查"],
       "到期日": "2026-12-18",
       "建立時間": "2026-01-14 11:00:00"
     }
@@ -469,6 +482,10 @@ app.post('/api/vertex-agent/query', async (req, res) => {
 ]
 
 **重要提醒**：請確保輸出陣列包含所有從會議中識別到的行動項目。`;
+        } else {
+            // Ensure targetLanguage is replaced if bracketed in client instruction
+            systemInstruction = systemInstruction.replace(/\{targetLanguage\}/g, targetLanguage);
+        }
 
         const response = await fetch(apiUrl, {
             method: 'POST',
