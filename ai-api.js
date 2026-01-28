@@ -418,6 +418,12 @@ function displayKeyPoints(keyPoints) {
                             </select>
                         </div>
                     </div>
+                    <div class="meta-row">
+                        <div class="field-group full-width"><span class="field-icon">🏷️</span><input type="text" class="edit-field keywords" value="${escapeHtmlAttribute(getFieldValue(item, '關鍵詞'))}" data-field="關鍵詞" placeholder="關鍵詞（逗號分隔）"></div>
+                    </div>
+                    <div class="meta-row">
+                        <div class="field-group full-width"><span class="field-icon">🏢</span><input type="text" class="edit-field department" value="${escapeHtmlAttribute(getFieldValue(item, '責任部門'))}" data-field="責任部門" placeholder="責任部門（逗號分隔）"></div>
+                    </div>
                 </div>
             </div>`;
     }).join('');

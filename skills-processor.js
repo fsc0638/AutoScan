@@ -294,8 +294,12 @@ ${inputText}
     buildPhase3Prompt(cleanedText, orgData, options = {}) {
         const targetLanguage = options.targetLanguage || 'Traditional Chinese';
         const sourceOptions = options.sourceOptions || '商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心';
-        const deptCode = orgData?.責任部門代碼 || 'KWAY';
-        const deptName = orgData?.責任部門 || '凱位';
+
+        // Project prefix: "KWAY_yyyymmdd" or "DeptCode_yyyymmdd"
+        const selectedDept = options.selectedDepartment;
+        const deptCode = selectedDept?.code || 'KWAY';
+        const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, ''); // yyyymmdd
+        const projectPrefix = `${deptCode}_${dateStr}`;
 
         // Potential owners identified in Phase 2
         const identifiedPeople = orgData?.識別人員 || [];
@@ -312,19 +316,18 @@ ${inputText}
 **所有輸出內容（ToDo、專案、負責人、關鍵詞等）必須完全使用「${targetLanguage}」書寫。** 嚴禁用日文或其他原始語言輸出。
 
 【關鍵變數】
-- **部門前綴: ${deptCode}** (重要：必須用於「專案」欄位)
+- **專案前綴: ${projectPrefix}** (重要：專案欄位格式為「${projectPrefix} 專案名稱」)
 - **人員候選名單: [${candidateStr}]** (包含：${meetingLead} 等)
-- 部門名稱: ${deptName}
 
 【欄位規則】
 1. ToDo: **15-30 字**，精簡書面語。**必須動詞開頭**（如：優化、提升、建立、完成、審閱）。
-2. 專案: 必須為「${deptCode} 專案核心名稱」。
+2. 專案: 必須為「${projectPrefix} 專案核心名稱」格式。
 3. **負責人 (重要)**: 
    - **語意指派**：請分析 ToDo 的內容，從「人員候選名單」中挑選最可能的負責人。
    - **邏輯點名**：如果在文本中有人主動認領任務，或被某人指派，請填寫該人名。
    - **預設值**：若無法確定具體個人，則填寫 ["${meetingLead}"] 或 ["待指派"]。
    - **格式**：必須是 Array of Strings，例如 ["張三"]。
-4. 責任部門: ["${deptName}"]
+4. **責任部門**: 不需要填寫，系統會根據負責人自動從 Personal List 查詢對應部門。
 5. 來源: 從 [${sourceOptions}] 擇一。**請務必根據 ToDo 的語意內容進行分析，選擇最貼切的來源。**
 6. 狀態: 未開始/進行中/完成 (預設使用 未開始)
 7. 關鍵詞 (IMPORTANT): 提取 **5-8** 個具有代表性的名詞。請包含：技術術語、專案代號、具體主題。**禁止使用單個虛詞（如：的、了、是）。**
@@ -344,7 +347,6 @@ ${cleanedText}
     "ToDo": "動詞開頭的行動描述",
     "狀態": "未開始",
     "負責人": ["${meetingLead}"],
-    "責任部門": ["${deptName}"],
     "關鍵詞": ["關鍵詞1", "關鍵詞2"],
     "建立時間": "2026-01-28"
   }
@@ -376,6 +378,86 @@ ${cleanedText}
         try {
             validatedData = this.extractJSON(result.text);
             if (!Array.isArray(validatedData)) validatedData = [validatedData];
+
+            // Name standardization - convert English names to Chinese
+            try {
+                const buildNameMapping = window.buildNameMappingFromCSV || (async () => new Map());
+                const nameMap = await buildNameMapping();
+
+                if (nameMap.size > 0) {
+                    validatedData = validatedData.map(item => {
+                        // Standardize 負責人 field
+                        if (item.負責人) {
+                            if (typeof item.負責人 === 'string') {
+                                const chineseName = nameMap.get(item.負責人) || item.負責人;
+                                item.負責人 = chineseName;
+                                if (this.debug && nameMap.get(item.負責人)) {
+                                    console.log(`[Phase 4] Name standardized: "${item.負責人}" → "${chineseName}"`);
+                                }
+                            } else if (Array.isArray(item.負責人)) {
+                                item.負責人 = item.負責人.map(name => {
+                                    const chineseName = nameMap.get(name) || name;
+                                    if (this.debug && nameMap.get(name)) {
+                                        console.log(`[Phase 4] Name standardized: "${name}" → "${chineseName}"`);
+                                    }
+                                    return chineseName;
+                                });
+                            }
+                        }
+                        return item;
+                    });
+
+                    if (this.debug) {
+                        console.log('[Phase 4] Name standardization completed');
+                    }
+                } else if (this.debug) {
+                    console.warn('[Phase 4] Name mapping is empty, skipping standardization');
+                }
+            } catch (error) {
+                if (this.debug) {
+                    console.error('[Phase 4] Name standardization error:', error);
+                }
+            }
+
+            // Department lookup - query Personal List CSV based on owner names
+            try {
+                const lookupDepartments = window.lookupDepartmentsFromCSV || (async () => []);
+
+                for (let i = 0; i < validatedData.length; i++) {
+                    const item = validatedData[i];
+                    const owners = item.負責人;
+
+                    if (owners) {
+                        const ownerList = typeof owners === 'string' ? [owners] : (Array.isArray(owners) ? owners : []);
+                        if (ownerList.length > 0 && ownerList[0] !== '待指派') {
+                            const departments = await lookupDepartments(ownerList);
+                            if (departments && departments.length > 0) {
+                                item.責任部門 = departments;
+                                if (this.debug) {
+                                    console.log(`[Phase 4] Department lookup for [${ownerList.join(', ')}]:`, departments);
+                                }
+                            } else {
+                                item.責任部門 = [];
+                                if (this.debug) {
+                                    console.warn(`[Phase 4] No department found for [${ownerList.join(', ')}]`);
+                                }
+                            }
+                        } else {
+                            item.責任部門 = [];
+                        }
+                    } else {
+                        item.責任部門 = [];
+                    }
+                }
+
+                if (this.debug) {
+                    console.log('[Phase 4] Department lookup completed');
+                }
+            } catch (error) {
+                if (this.debug) {
+                    console.error('[Phase 4] Department lookup error:', error);
+                }
+            }
 
             if (this.debug) {
                 console.log('[Phase 4] Final items count:', validatedData.length);

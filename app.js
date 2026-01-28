@@ -647,6 +647,165 @@ async function handleUpdateSchema() {
 }
 
 /**
+ * Build name mapping from Personal List CSV
+ * Creates a lookup table to standardize names to Chinese
+ * @returns {Promise<Map<string, string>>} Map of (name|email) => Chinese name
+ */
+async function buildNameMappingFromCSV() {
+  const nameMap = new Map();
+
+  try {
+    const csvPath = 'Personal List of Kway.csv';
+    const response = await fetch(csvPath);
+    if (!response.ok) {
+      console.warn('[Name Mapping] CSV file not found');
+      return nameMap;
+    }
+
+    const csvText = await response.text();
+    const lines = csvText.split('\n');
+
+    // Parse CSV (skip header)
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // CSV format: 序號,員工編號,姓名,分機,部門代號,部門名稱,職稱,信箱
+      const parts = line.split(',');
+      if (parts.length < 8) continue;
+
+      const chineseName = parts[2]?.trim(); // 姓名
+      const email = parts[7]?.trim(); // 信箱
+
+      if (!chineseName) continue;
+
+      // Map Chinese name to itself
+      nameMap.set(chineseName, chineseName);
+
+      // Extract English name from email (e.g., "james@mail.kway.com.tw" -> "james")
+      if (email) {
+        const emailUsername = email.split('@')[0]?.toLowerCase();
+        if (emailUsername) {
+          nameMap.set(emailUsername, chineseName);
+          // Also map capitalized version
+          nameMap.set(emailUsername.charAt(0).toUpperCase() + emailUsername.slice(1), chineseName);
+          nameMap.set(emailUsername.toUpperCase(), chineseName);
+        }
+      }
+    }
+
+    console.log(`[Name Mapping] Built mapping for ${nameMap.size} name variations`);
+    return nameMap;
+
+  } catch (error) {
+    console.error('[Name Mapping] Error reading CSV:', error);
+    return nameMap;
+  }
+}
+
+/**
+ * Lookup departments from Personal List CSV based on owner names
+ * @param {string[]} ownerNames - Array of owner names to look up
+ * @returns {Promise<string[]>} Array of unique department names
+ */
+async function lookupDepartmentsFromCSV(ownerNames) {
+  if (!ownerNames || ownerNames.length === 0) return [];
+
+  try {
+    // Load CSV file
+    const csvPath = 'Personal List of Kway.csv';
+    const response = await fetch(csvPath);
+    if (!response.ok) {
+      console.warn('[CSV Lookup] CSV file not found, skipping department lookup');
+      return [];
+    }
+
+    const csvText = await response.text();
+    const lines = csvText.split('\n');
+    const departments = new Set();
+
+    // Build a lookup structure for both exact and fuzzy matching
+    const csvData = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // CSV format: 序號,員工編號,姓名,分機,部門代號,部門名稱,職稱,信箱
+      const parts = line.split(',');
+      if (parts.length < 6) continue;
+
+      const name = parts[2]?.trim(); // 姓名
+      const deptName = parts[5]?.trim().replace(/^"(.*)"$/, '$1'); // 部門名稱
+      const email = parts[7]?.trim(); // 信箱
+
+      if (name && deptName) {
+        csvData.push({ name, deptName, email });
+      }
+    }
+
+    // Process each owner name
+    for (const ownerName of ownerNames) {
+      if (!ownerName || ownerName === '待指派') continue;
+
+      const ownerLower = ownerName.toLowerCase().trim();
+      let matched = false;
+
+      // Strategy 1: Exact name match (Chinese name)
+      for (const row of csvData) {
+        if (row.name === ownerName) {
+          departments.add(row.deptName);
+          matched = true;
+          console.log(`[CSV Lookup] ✅ Exact match: "${ownerName}" → "${row.deptName}"`);
+          break;
+        }
+      }
+
+      // Strategy 2: Email prefix match (English name / email username)
+      if (!matched) {
+        for (const row of csvData) {
+          if (!row.email) continue;
+
+          const emailPrefix = row.email.split('@')[0]?.toLowerCase();
+          if (emailPrefix && emailPrefix === ownerLower) {
+            departments.add(row.deptName);
+            matched = true;
+            console.log(`[CSV Lookup] ✅ Email match: "${ownerName}" → "${emailPrefix}@..." → "${row.deptName}"`);
+            break;
+          }
+        }
+      }
+
+      // Strategy 3: Partial email match (case-insensitive contains)
+      if (!matched) {
+        for (const row of csvData) {
+          if (!row.email) continue;
+
+          const emailPrefix = row.email.split('@')[0]?.toLowerCase();
+          if (emailPrefix && emailPrefix.includes(ownerLower)) {
+            departments.add(row.deptName);
+            matched = true;
+            console.log(`[CSV Lookup] ⚠️ Fuzzy match: "${ownerName}" contained in "${emailPrefix}@..." → "${row.deptName}"`);
+            break;
+          }
+        }
+      }
+
+      if (!matched) {
+        console.warn(`[CSV Lookup] ❌ No match found for: "${ownerName}"`);
+      }
+    }
+
+    const result = Array.from(departments);
+    console.log(`[CSV Lookup] Found departments for [${ownerNames.join(', ')}]:`, result);
+    return result;
+
+  } catch (error) {
+    console.error('[CSV Lookup] Error reading CSV:', error);
+    return [];
+  }
+}
+
+/**
  * Upload structured data to Notion - supports both simple array and structured JSON format
  */
 async function uploadToNotionAPI(points, config) {
@@ -722,16 +881,26 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
         };
       }
 
-      // Multi-select fields (only add if not empty)
-      if (props.來源 && Array.isArray(props.來源) && props.來源.length > 0) {
-        notionProperties['來源'] = {
-          multi_select: props.來源.map(name => ({ name }))
-        };
-      } else if (props.歸屬分類 && Array.isArray(props.歸屬分類) && props.歸屬分類.length > 0) {
-        // Backward compatibility for UI
-        notionProperties['來源'] = {
-          multi_select: props.歸屬分類.map(name => ({ name }))
-        };
+      // 來源 field - Notion expects multi_select type
+      if (props.來源) {
+        if (typeof props.來源 === 'string') {
+          // Convert string to array for multi_select
+          notionProperties['來源'] = {
+            multi_select: [{ name: props.來源 }]
+          };
+        } else if (Array.isArray(props.來源) && props.來源.length > 0) {
+          notionProperties['來源'] = {
+            multi_select: props.來源.map(name => ({ name }))
+          };
+        }
+      } else if (props.歸屬分類) {
+        // Backward compatibility
+        const sources = typeof props.歸屬分類 === 'string' ? [props.歸屬分類] : props.歸屬分類;
+        if (sources && sources.length > 0) {
+          notionProperties['來源'] = {
+            multi_select: sources.map(name => ({ name }))
+          };
+        }
       }
 
       if (props.專案 && Array.isArray(props.專案) && props.專案.length > 0) {
@@ -740,11 +909,22 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
         };
       }
 
-      const keywords = props.關鍵詞 || props.關鍵字 || props.關鍵字標籤;
+      // 關鍵詞 field - check multiple possible property names
+      console.log(`[Debug Item ${i + 1}] Checking keywords field...`);
+      console.log(`[Debug Item ${i + 1}] props.關鍵詞:`, props.關鍵詞);
+      console.log(`[Debug Item ${i + 1}] props.關鍵字:`, props.關鍵字);
+      console.log(`[Debug Item ${i + 1}] All props keys:`, Object.keys(props));
+
+      const keywords = props.關鍵詞 || props.關鍵字 || props.關鍵字標籤 || props['關鍵詞'];
+      console.log(`[Debug Item ${i + 1}] Final keywords value:`, keywords);
+
       if (keywords && Array.isArray(keywords) && keywords.length > 0) {
         notionProperties['關鍵詞'] = {
           multi_select: keywords.map(name => ({ name }))
         };
+        console.log(`[Debug Item ${i + 1}] ✅ Added keywords to Notion properties:`, keywords);
+      } else {
+        console.warn(`[Debug Item ${i + 1}] ❌ Keywords not added - keywords:`, keywords, 'isArray:', Array.isArray(keywords));
       }
 
       if (props.責任部門 && Array.isArray(props.責任部門) && props.責任部門.length > 0) {
@@ -764,16 +944,40 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
         };
       }
 
-      // People field (not rich_text!) - Note: This requires the person to exist in your Notion workspace
-      // For now, we'll skip this field as it requires user IDs, not names
-      // If you want to use it, you need to map names to Notion user IDs
-      /*
-      if (props.負責人) {
-        notionProperties['負責人'] = {
-          people: [{ name: props.負責人 }]  // This won't work - needs user IDs
-        };
+      // 負責人 field - use multi_select as workaround for People type
+      // Notion's People type requires user IDs, which we don't have
+      // So we store names as multi_select instead
+      const owners = props.負責人 || props.負責人員;
+      if (owners) {
+        if (typeof owners === 'string') {
+          notionProperties['負責人'] = {
+            multi_select: [{ name: owners }]
+          };
+        } else if (Array.isArray(owners) && owners.length > 0) {
+          notionProperties['負責人'] = {
+            multi_select: owners.map(name => ({ name }))
+          };
+        }
       }
-      */
+
+      // 責任部門 field - ALWAYS lookup from Personal List CSV based on 負責人
+      // Override AI's department assignment with CSV data
+      const ownerList = typeof owners === 'string' ? [owners] : (Array.isArray(owners) ? owners : []);
+      if (ownerList.length > 0) {
+        const departments = await lookupDepartmentsFromCSV(ownerList);
+        if (departments && departments.length > 0) {
+          // Override with CSV lookup result
+          props.責任部門 = departments;
+          console.log(`[Upload] ✅ Department from CSV for [${ownerList.join(', ')}]:`, departments);
+        } else {
+          // CLEAR invalid AI department - CSV is the only source of truth
+          props.責任部門 = [];
+          console.warn(`[Upload] ⚠️ No department found in CSV for [${ownerList.join(', ')}], CLEARING invalid AI value`);
+        }
+      } else {
+        // No owner specified, clear department
+        props.責任部門 = [];
+      }
 
       // Date fields
       if (props.到期日) {
@@ -789,6 +993,9 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
           date: { start: isoDate }
         };
       }
+
+      // Debug: Log final properties before upload
+      console.log(`[Debug Item ${i + 1}] Final Notion Properties:`, JSON.stringify(notionProperties, null, 2));
 
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -1008,8 +1215,11 @@ function collectKeyPointsFromUI() {
         const field = input.dataset.field;
         const value = input.value.trim();
 
-        if (field === '歸屬分類' || field === '專案') {
-          // Split by comma
+        // Fields that should be arrays (split by comma)
+        const arrayFields = ['歸屬分類', '專案', '關鍵詞', '負責人', '責任部門', '來源'];
+
+        if (arrayFields.includes(field)) {
+          // Split by comma and filter empty strings
           props[field] = value ? value.split(/[,，]/).map(s => s.trim()).filter(s => s) : [];
         } else {
           props[field] = value;
