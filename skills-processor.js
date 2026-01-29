@@ -328,9 +328,9 @@ ${inputText}
         const targetLanguage = options.targetLanguage || 'Traditional Chinese';
         const sourceOptions = options.sourceOptions || '商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心';
 
-        // Project prefix: "KWAY_yyyymmdd" or "DeptCode_yyyymmdd"
+        // Project prefix: "T612_yyyymmdd" or "KWAY_yyyymmdd" (default)
         const selectedDept = options.selectedDepartment;
-        const deptCode = selectedDept?.code || 'KWAY';
+        const deptCode = selectedDept?.subDepartment?.code || 'KWAY';
         const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, ''); // yyyymmdd
         const projectPrefix = `${deptCode}_${dateStr}`;
 
