@@ -318,10 +318,38 @@ app.post('/api/notion/structured', async (req, res) => {
                 console.log(`[Server] Max Similarity found: ${(maxSimilarity * 100).toFixed(1)}%`);
 
                 // 3. Decide: Update or Insert?
-                if (bestMatch && maxSimilarity >= 0.5) {
-                    console.log(`[Server] Duplicate found! Updating page ID: ${bestMatch.id}`);
+                // Threshold: 60% similarity
+                if (bestMatch && maxSimilarity >= 0.6) {
+                    console.log(`[Server] Duplicate found (${(maxSimilarity * 100).toFixed(1)}%)! Updating page ID: ${bestMatch.id}`);
 
-                    // Perform UPDATE (PATCH)
+                    // **SELECTIVE UPDATE**: Only update AI-generated fields
+                    // Preserve: 來源, 專案, 負責人, 責任部門, 階段里程碑, 建立時間, 執行人, 工時
+                    // Update: 關鍵詞, ToDo (Title), 到期日, 狀態
+                    const selectiveProperties = {};
+
+                    // 1. Update Title (ToDo) if exists
+                    if (properties[titleKey]) {
+                        selectiveProperties[titleKey] = properties[titleKey];
+                    }
+
+                    // 2. Update Keywords (關鍵詞) if exists
+                    if (properties['關鍵詞']) {
+                        selectiveProperties['關鍵詞'] = properties['關鍵詞'];
+                    }
+
+                    // 3. Update Due Date (到期日) if exists
+                    if (properties['到期日']) {
+                        selectiveProperties['到期日'] = properties['到期日'];
+                    }
+
+                    // 4. Update Status (狀態) if exists
+                    if (properties['狀態']) {
+                        selectiveProperties['狀態'] = properties['狀態'];
+                    }
+
+                    console.log(`[Server] Updating ${Object.keys(selectiveProperties).length} fields: ${Object.keys(selectiveProperties).join(', ')}`);
+
+                    // Perform UPDATE (PATCH) with selective properties only
                     const updateResponse = await fetch(`https://api.notion.com/v1/pages/${bestMatch.id}`, {
                         method: 'PATCH',
                         headers: {
@@ -330,15 +358,15 @@ app.post('/api/notion/structured', async (req, res) => {
                             'Notion-Version': '2022-06-28'
                         },
                         body: JSON.stringify({
-                            properties: properties // Update all properties
+                            properties: selectiveProperties // Only update selected fields
                         })
                     });
 
                     const updateData = await updateResponse.json();
                     if (!updateResponse.ok) throw new Error(`Notion Update Error: ${JSON.stringify(updateData)}`);
 
-                    console.log('[Server] Notion Update Success!');
-                    return res.json({ ...updateData, _action: 'updated', _similarity: maxSimilarity });
+                    console.log('[Server] Notion Selective Update Success!');
+                    return res.json({ ...updateData, _action: 'updated', _similarity: maxSimilarity, _updatedFields: Object.keys(selectiveProperties) });
                 }
             } else {
                 console.warn('[Server] Failed to query Notion DB, falling back to INSERT.');

@@ -18,10 +18,9 @@ let analysisStartTime = null;
 const STATUS_I18N = {
   'zh-TW': {
     'starting': '🚀 正在啟動 AI 進行分析...',
-    'phase1': '📋 階段 1/4: 清洗文本...',
-    'phase2': '📋 階段 2/4: 組織識別...',
-    'phase3': '📋 階段 3/4: Notion 結構映射...',
-    'phase4': '📋 階段 4/4: 品質核檢...',
+    'phase1': '📋 階段 1/3: 清洗文本...',
+    'phase2': '📋 階段 2/3: 組織識別...',
+    'phase3': '📋 階段 3/3: Notion 映射 + 品質檢核...',
     'success': '✅ 分析完成！',
     'error': '❌ 分析失敗',
     'loading': '分析中...',
@@ -29,10 +28,9 @@ const STATUS_I18N = {
   },
   'en': {
     'starting': '🚀 Starting AI analysis...',
-    'phase1': '📋 Phase 1/4: Sanitizing text...',
-    'phase2': '📋 Phase 2/4: Org Specialist...',
-    'phase3': '📋 Phase 3/4: Notion mapping...',
-    'phase4': '📋 Phase 4/4: QA Inspector...',
+    'phase1': '📋 Phase 1/3: Sanitizing text...',
+    'phase2': '📋 Phase 2/3: Org Specialist...',
+    'phase3': '📋 Phase 3/3: Notion mapping + QA...',
     'success': '✅ Analysis complete!',
     'error': '❌ Analysis failed',
     'loading': 'Analyzing...',
@@ -40,10 +38,9 @@ const STATUS_I18N = {
   },
   'ja': {
     'starting': '🚀 AI分析を開始しています...',
-    'phase1': '📋 フェーズ 1/4: テキストのクレンジング...',
-    'phase2': '📋 フェーズ 2/4: 組織の識別...',
-    'phase3': '📋 フェーズ 3/4: Notion構造マッピング...',
-    'phase4': '📋 フェーズ 4/4: 品質チェック...',
+    'phase1': '📋 フェーズ 1/3: テキストのクレンジング...',
+    'phase2': '📋 フェーズ 2/3: 組織の識別...',
+    'phase3': '📋 フェーズ 3/3: Notionマッピング + 品質チェック...',
     'success': '✅ 分析が完了しました！',
     'error': '❌ 分析に失敗しました',
     'loading': '分析中...',
@@ -344,11 +341,8 @@ async function startAnalysis() {
       showStatus(i18n.phase3, 'loading', true);
       const jsonArray = await processor.runPhase3(cleanedText, orgData, skillsOptions);
 
-      showStatus(i18n.phase4, 'loading', true);
-      const validatedData = await processor.runPhase4(jsonArray, skillsOptions);
-
-      // Use the validated data
-      keyPoints = validatedData;
+      // Use Phase 3 output directly (quality checks now integrated into Phase 3)
+      keyPoints = jsonArray;
       console.log('[App] Skills Processor pipeline completed:', keyPoints.length, 'items');
     }
 
