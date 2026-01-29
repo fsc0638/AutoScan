@@ -151,7 +151,7 @@ ${inputText}
     /**
      * PHASE 2: Org Specialist
      * Input: Cleaned text
-     * Output: Organization data (JSON)
+     * Output: Organization data (JSON) with validated employee names
      */
     async runPhase2(cleanedText, options) {
         const selectedDept = options?.selectedDepartment;
@@ -160,7 +160,27 @@ ${inputText}
             console.log('[Phase 2] Selected Dept from options:', selectedDept);
         }
 
-        const prompt = this.buildPhase2Prompt(cleanedText, selectedDept);
+        // Fetch valid employee names from Personal List CSV
+        let validEmployeeNames = new Set();
+        try {
+            const buildNameMapping = window.buildNameMappingFromCSV || (async () => new Map());
+            const nameMap = await buildNameMapping();
+            // Add all Chinese names to valid set
+            for (const chineseName of nameMap.values()) {
+                if (chineseName) validEmployeeNames.add(chineseName);
+            }
+            // Also add all English names (keys)
+            for (const englishName of nameMap.keys()) {
+                if (englishName) validEmployeeNames.add(englishName);
+            }
+            if (this.debug) {
+                console.log('[Phase 2] Loaded employee whitelist:', validEmployeeNames.size, 'names');
+            }
+        } catch (error) {
+            console.warn('[Phase 2] Could not load employee whitelist:', error.message);
+        }
+
+        const prompt = this.buildPhase2Prompt(cleanedText, selectedDept, validEmployeeNames);
 
         const result = await this.llm.call(prompt, {
             ...options,
@@ -170,6 +190,60 @@ ${inputText}
         let orgData;
         try {
             orgData = this.extractJSON(result.text);
+
+            // --- PHASE 2 HALLUCINATION GUARD ---
+            // Strict validation ONLY for 負責人 (must be company employee or "待指派")
+            // Relaxed for 識別人員 and 執行人 (can include external partners)
+            if (validEmployeeNames.size > 0) {
+                // ✅ STRICT: Validate 負責人 (only company employees)
+                if (Array.isArray(orgData.負責人)) {
+                    const originalOwners = orgData.負責人;
+                    orgData.負責人 = originalOwners.filter(name => {
+                        if (name === '待指派') return true;
+                        const isValid = validEmployeeNames.has(name);
+                        if (!isValid && this.debug) {
+                            console.warn(`[Phase 2] 🛡️ Hallucination blocked (負責人): "${name}" - not in employee list`);
+                        }
+                        return isValid;
+                    });
+                    if (orgData.負責人.length === 0) {
+                        orgData.負責人 = ['待指派'];
+                    }
+                }
+
+                // ⚠️ RELAXED: Keep 識別人員 as-is (may include external partners)
+                // Only filter out obvious hallucinations (very common fake names)
+                const obviousHallucinations = new Set(['王小華', '張偉', '李強', '王強', '陳明', '李佳', '張麗', '王芳']);
+                if (Array.isArray(orgData.識別人員)) {
+                    const originalPeople = orgData.識別人員;
+                    orgData.識別人員 = originalPeople.filter(name => {
+                        const isObviouslyFake = obviousHallucinations.has(name);
+                        if (isObviouslyFake && this.debug) {
+                            console.warn(`[Phase 2] 🛡️ Hallucination blocked (識別人員): "${name}" - obvious fake name`);
+                        }
+                        return !isObviouslyFake;
+                    });
+                }
+
+                // ⚠️ RELAXED: Keep 執行人 as-is (may include external partners)
+                if (Array.isArray(orgData.執行人)) {
+                    const originalExecutors = orgData.執行人;
+                    orgData.執行人 = originalExecutors.filter(name => {
+                        if (name === '待指派') return true;
+                        const isObviouslyFake = obviousHallucinations.has(name);
+                        if (isObviouslyFake && this.debug) {
+                            console.warn(`[Phase 2] 🛡️ Hallucination blocked (執行人): "${name}" - obvious fake name`);
+                        }
+                        return !isObviouslyFake;
+                    });
+                }
+
+                if (this.debug) {
+                    console.log('[Phase 2] After Hallucination Guard - 識別人員:', orgData.識別人員);
+                    console.log('[Phase 2] After Hallucination Guard - 負責人:', orgData.負責人);
+                    console.log('[Phase 2] After Hallucination Guard - 執行人:', orgData.執行人);
+                }
+            }
 
             // FORCE OVERRIDE with user selection if available
             const subDept = selectedDept?.subDepartment;
@@ -201,9 +275,16 @@ ${inputText}
     /**
      * Build Phase 2 Prompt
      */
-    buildPhase2Prompt(cleanedText, selectedDept) {
+    buildPhase2Prompt(cleanedText, selectedDept, validEmployeeNames = new Set()) {
         const userHint = selectedDept?.subDepartment ?
             `\n⚠️ 用戶已在 UI 選擇部門：${selectedDept.subDepartment.name} (代號: ${selectedDept.subDepartment.code})，請以此為優先參考。` : '';
+
+        // Create a sample of employee names for the prompt (max 50 to keep prompt reasonable)
+        const employeeArray = [...validEmployeeNames];
+        const sampleSize = Math.min(employeeArray.length, 50);
+        const employeeSample = employeeArray.slice(0, sampleSize).join('、');
+        const employeeHint = employeeSample ?
+            `\n\n【公司員工名單 (部分)】僅供參考，用於識別會議中的人名：\n${employeeSample}${employeeArray.length > sampleSize ? '... 等' : ''}` : '';
 
         return `你是一位專門的「組織識別專家」，負責識別文本中的人名、職稱、部門以及他們在會議中的角色。${userHint}
 
@@ -214,6 +295,12 @@ ${inputText}
    - **執行人/關係人**：被指派任務、或是被提及與某事有關的人。
 3. **識別職稱/單位**：如果文本中有提到如「工程師」、「業務」、「開發組」等，請一併記錄。
 4. **部門對應**：將識別到的部門對應到代號（如 T255, T201 等）。
+
+【⚠️ 嚴格人名限制 (CRITICAL)】
+- **僅識別文本中明確出現的人名**。
+- **嚴禁自創或編造任何人名**（如：王小華、張偉、李強 等常見虛構名字）。
+- 若文本中沒有任何人名被提及，**負責人** 和 **執行人** 欄位請填入 ["待指派"]。
+- 只有在文本中「字面上」出現某人的名字時，才能將其列入。${employeeHint}
 
 【參考部門清單】
 - Y200 研發中心-開發處
@@ -226,8 +313,8 @@ ${inputText}
 
 【輸出要求】
 1. 僅輸出 JSON，不要 Markdown。
-2. **負責人** 欄位請填入此份會議的最主要決策者或主持人。
-3. **執行人** 欄位請列出所有「被指派任務」或「未來需要採取行動」的人員清單。
+2. **負責人** 欄位請填入此份會議的最主要決策者或主持人。若無法確定，填入 ["待指派"]。
+3. **執行人** 欄位請列出所有「被指派任務」或「未來需要採取行動」的人員清單。若無，填入空陣列 []。
 
 【輸出格式 (JSON)】
 {
@@ -237,7 +324,10 @@ ${inputText}
   "職稱或單位": ["識別到的職稱或內部單位名稱"],
   "責任部門": "名稱",
   "責任部門代碼": "4碼(如T255)或KWAY"
-}`;
+}
+
+【待分析文本】
+${cleanedText}`;
     }
 
     /**
@@ -254,10 +344,28 @@ ${inputText}
             console.log('[Phase 3] ✅ Ensuring selection is used:', orgData.責任部門代碼);
         }
 
-        const prompt = this.buildPhase3Prompt(cleanedText, orgData, options);
+        // Initialize candidate list for the prompt and for post-processing validation
+        // Handle both string arrays and object arrays (with .姓名 property)
+        const rawIdentifiedPeople = orgData?.識別人員 || [];
+        const identifiedPeople = rawIdentifiedPeople.map(p => {
+            if (typeof p === 'string') return p;
+            if (p && p.姓名) return p.姓名;
+            return null;
+        }).filter(n => n != null);
+
+        const meetingLead = orgData?.負責人?.[0] || '待指派';
+        const taskOwners = orgData?.執行人 || [];
+
+        // Combine all legitimate candidates (filter undefined/null/待指派)
+        const candidates = [...new Set([...identifiedPeople, ...taskOwners, meetingLead])]
+            .filter(n => n != null && n !== '待指派' && n !== undefined);
+        const candidateSet = new Set(candidates);
+        candidateSet.add('待指派');
+
+        const prompt = this.buildPhase3Prompt(cleanedText, orgData, options, candidates);
 
         if (this.debug) {
-            console.log('[Phase 3] Generating items for dept:', orgData.責任部門代碼);
+            console.log('[Phase 3] Generating items with candidates:', candidates);
         }
 
         const result = await this.llm.call(prompt, {
@@ -270,8 +378,29 @@ ${inputText}
             jsonArray = this.extractJSON(result.text);
             if (!Array.isArray(jsonArray)) jsonArray = [jsonArray];
 
+            // --- HALLUCINATION GUARD ---
+            // प्रोग्रामmatically ensure only valid candidates are allowed
+            jsonArray = jsonArray.map(item => {
+                if (item.負責人) {
+                    const originalOwners = Array.isArray(item.負責人) ? item.負責人 : [item.負責人];
+
+                    // Filter out any name not in our official candidate list
+                    const validOwners = originalOwners.filter(name => candidateSet.has(name));
+
+                    if (validOwners.length === 0) {
+                        if (this.debug) console.warn(`[Phase 3] 🛡️ Hallucination blocked: "${originalOwners.join(', ')}" replaced with "待指派"`);
+                        item.負責人 = ["待指派"];
+                    } else {
+                        item.負責人 = validOwners;
+                    }
+                } else {
+                    item.負責人 = ["待指派"];
+                }
+                return item;
+            });
+
             if (this.debug) {
-                console.log('[Phase 3] Extracted items:', jsonArray.length);
+                console.log('[Phase 3] Extracted items after Hallucination Guard:', jsonArray.length);
             }
 
             // Name standardization - convert English names to Chinese
@@ -324,23 +453,18 @@ ${inputText}
     /**
      * Build Phase 3 Prompt
      */
-    buildPhase3Prompt(cleanedText, orgData, options = {}) {
+    buildPhase3Prompt(cleanedText, orgData, options = {}, candidates = []) {
         const targetLanguage = options.targetLanguage || 'Traditional Chinese';
         const sourceOptions = options.sourceOptions || '商業模式, 外部合作, 法律法規, 會議記錄, 董事會顧問會議, 董事長交辦, KWAY研發中心';
 
         // Project prefix: "T612_yyyymmdd" or "KWAY_yyyymmdd" (default)
         const selectedDept = options.selectedDepartment;
-        const deptCode = selectedDept?.subDepartment?.code || 'KWAY';
+        // Try subDepartment first, fallback to mainDepartment, then KWAY
+        const deptCode = selectedDept?.subDepartment?.code || selectedDept?.mainDepartment?.code || 'KWAY';
         const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, ''); // yyyymmdd
         const projectPrefix = `${deptCode}_${dateStr}`;
 
-        // Potential owners identified in Phase 2
-        const identifiedPeople = orgData?.識別人員 || [];
         const meetingLead = orgData?.負責人?.[0] || '待指派';
-        const taskOwners = orgData?.執行人 || [];
-
-        // Combine all people into a list for the AI to choose from
-        const candidates = [...new Set([...identifiedPeople, ...taskOwners, meetingLead])].filter(n => n !== '待指派');
         const candidateStr = candidates.length > 0 ? candidates.join(', ') : '待指派';
 
         return `你是「資料庫專家」，負責將文本轉為 Notion JSON Array。
@@ -353,14 +477,14 @@ ${inputText}
 - **人員候選名單: [${candidateStr}]** (包含：${meetingLead} 等)
 
 【欄位規則】
-1. ToDo: **15-30 字**，精簡書面語。**必須動詞開頭**（如：優化、提升、建立、完成、審閱）。
-   - **若超過 40 字，必須立即改寫為 15-30 字的精簡格式。**
-   - **保留核心動詞與對象，刪除形容詞與背景描述。**
+1. ToDo: **25-50 字**，精簡書面語。**必須動詞開頭**（如：優化、提升、建立、完成、審閱）。
+   - **內容要素**：必須包含「核心動作」與「具體對象」，避免過於籠統（例如：不要只寫「簽署合約」，應寫「完成與 Groovenauts 的日本公司合作意向書簽署」）。
+   - **長度控制**：若超過 60 字，請改寫為 25-50 字的格式，保留關鍵細節並刪除修飾性形容詞。
 2. 專案: 必須為「${projectPrefix} 專案核心名稱」格式。
 3. **負責人 (重要)**: 
-   - **語意指派**：請分析 ToDo 的內容，從「人員候選名單」中挑選最可能的負責人。
-   - **邏輯點名**：如果在文本中有人主動認領任務，或被某人指派，請填寫該人名。
-   - **預設值**：若無法確定具體個人，則填寫 ["${meetingLead}"] 或 ["待指派"]。
+   - **嚴格限制 (CRITICAL)**：僅能從提供的「人員候選名單」中挑選。**嚴禁自創或編造名單以外的任何姓名**（如：王小華、陳志強等）。
+   - **語意指派**：分析 ToDo 內容，若與名單中某人職責相關則指派之。
+   - **唯一備選方案**：若名單中無人適任，或名單為空，**必須**填寫 ["待指派"]。
    - **格式**：必須是 Array of Strings，例如 ["張三"]。
 4. 來源: 從 [${sourceOptions}] 擇一。**請務必根據 ToDo 的語意內容進行分析，選擇最貼切的來源。**
 5. 狀態: 未開始/進行中/完成 (預設使用 未開始)
