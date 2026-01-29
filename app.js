@@ -960,25 +960,6 @@ async function uploadStructuredDataToNotion(items, config, isLocalhost) {
         }
       }
 
-      // 責任部門 field - ALWAYS lookup from Personal List CSV based on 負責人
-      // Override AI's department assignment with CSV data
-      const ownerList = typeof owners === 'string' ? [owners] : (Array.isArray(owners) ? owners : []);
-      if (ownerList.length > 0) {
-        const departments = await lookupDepartmentsFromCSV(ownerList);
-        if (departments && departments.length > 0) {
-          // Override with CSV lookup result
-          props.責任部門 = departments;
-          console.log(`[Upload] ✅ Department from CSV for [${ownerList.join(', ')}]:`, departments);
-        } else {
-          // CLEAR invalid AI department - CSV is the only source of truth
-          props.責任部門 = [];
-          console.warn(`[Upload] ⚠️ No department found in CSV for [${ownerList.join(', ')}], CLEARING invalid AI value`);
-        }
-      } else {
-        // No owner specified, clear department
-        props.責任部門 = [];
-      }
-
       // Date fields
       if (props.到期日) {
         notionProperties['到期日'] = {

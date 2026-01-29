@@ -419,46 +419,6 @@ ${cleanedText}
                 }
             }
 
-            // Department lookup - query Personal List CSV based on owner names
-            try {
-                const lookupDepartments = window.lookupDepartmentsFromCSV || (async () => []);
-
-                for (let i = 0; i < validatedData.length; i++) {
-                    const item = validatedData[i];
-                    const owners = item.負責人;
-
-                    if (owners) {
-                        const ownerList = typeof owners === 'string' ? [owners] : (Array.isArray(owners) ? owners : []);
-                        if (ownerList.length > 0 && ownerList[0] !== '待指派') {
-                            const departments = await lookupDepartments(ownerList);
-                            if (departments && departments.length > 0) {
-                                item.責任部門 = departments;
-                                if (this.debug) {
-                                    console.log(`[Phase 4] Department lookup for [${ownerList.join(', ')}]:`, departments);
-                                }
-                            } else {
-                                item.責任部門 = [];
-                                if (this.debug) {
-                                    console.warn(`[Phase 4] No department found for [${ownerList.join(', ')}]`);
-                                }
-                            }
-                        } else {
-                            item.責任部門 = [];
-                        }
-                    } else {
-                        item.責任部門 = [];
-                    }
-                }
-
-                if (this.debug) {
-                    console.log('[Phase 4] Department lookup completed');
-                }
-            } catch (error) {
-                if (this.debug) {
-                    console.error('[Phase 4] Department lookup error:', error);
-                }
-            }
-
             if (this.debug) {
                 console.log('[Phase 4] Final items count:', validatedData.length);
                 console.log('[Phase 4] Cleanup completed.');

@@ -338,6 +338,65 @@ function getLanguageName(langCode) {
     return langMap[langCode] || '繁體中文';
 }
 
+
+
+// Department options from Department List of Kway.txt (grouped by category)
+const DEPARTMENT_GROUPS = {
+    '研發組': [
+        '研發中心',
+        '研發中心-開發處',
+        '(一)產品開發一處',
+        '(二)產品開發處',
+        '(三)創新產品處',
+        '資訊處'
+    ],
+    '業務組': [
+        '(一)業務處',
+        '(二)業務處'
+    ],
+    '行銷組': [
+        '公關暨專案室'
+    ],
+    '管理組': [
+        '董事長室',
+        '總經理室',
+        '董總辦公室',
+        '管理處',
+        '財務處',
+        '(一)帳務產品處',
+        '(一)產品服務處',
+        '(二)產品服務處',
+        '(總)-交易所專案處'
+    ],
+    '事業群': [
+        '第一事業群',
+        '第二事業群',
+        '第三事業群'
+    ]
+};
+
+/**
+ * Generate department select options with grouped structure
+ */
+function generateDepartmentOptions(currentValue) {
+    const selectedDepts = currentValue
+        ? (typeof currentValue === 'string' ? currentValue.split(',').map(s => s.trim()) : currentValue)
+        : [];
+
+    let html = '<option value="" disabled selected>請選擇部門</option>';
+
+    for (const [groupName, depts] of Object.entries(DEPARTMENT_GROUPS)) {
+        html += `<optgroup label="${groupName}">`;
+        depts.forEach(dept => {
+            const selected = selectedDepts.includes(dept) ? 'selected' : '';
+            html += `<option value="${escapeHtmlAttribute(dept)}" ${selected}>${dept}</option>`;
+        });
+        html += '</optgroup>';
+    }
+
+    return html;
+}
+
 /**
  * Display key points in UI
  */
@@ -421,9 +480,6 @@ function displayKeyPoints(keyPoints) {
                     <div class="meta-row">
                         <div class="field-group full-width"><span class="field-icon">🏷️</span><input type="text" class="edit-field keywords" value="${escapeHtmlAttribute(getFieldValue(item, '關鍵詞'))}" data-field="關鍵詞" placeholder="關鍵詞（逗號分隔）"></div>
                     </div>
-                    <div class="meta-row">
-                        <div class="field-group full-width"><span class="field-icon">🏢</span><input type="text" class="edit-field department" value="${escapeHtmlAttribute(getFieldValue(item, '責任部門'))}" data-field="責任部門" placeholder="責任部門（逗號分隔）"></div>
-                    </div>
                 </div>
             </div>`;
     }).join('');
@@ -431,6 +487,8 @@ function displayKeyPoints(keyPoints) {
     html += '</div>';
     container.innerHTML = html;
 }
+
+
 
 function escapeHtmlAttribute(text) {
     if (text === null || text === undefined) return '';
